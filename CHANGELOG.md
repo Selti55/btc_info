@@ -16,11 +16,17 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.1.1] - 2026-02-22
+
+### Added
+- Changelog-Grundgerüst (`CHANGELOG.md`) ergänzt.
+
 ## [0.1.0] - 2026-02-22
 
 ### Added
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Selti55/btc_info/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Selti55/btc_info/releases/tag/v0.1.0
