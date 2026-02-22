@@ -2,11 +2,16 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
+Aktuelle Version: **v0.2.0**
+
 ## Enthalten
 
 - Arduino + ESP32-S3 (`esp32-s3-devkitc-1`)
 - Bibliothek `GxEPD2`
-- Start-Screen-Test in `src/main.cpp`
+- CoinGecko BTC-Daten (EUR, USD, Market Cap)
+- BTC-Blockhöhe + Moskauzeit (Sats pro USD)
+- e-Paper-Ausgabe mit statischem und dynamischem Bereich
+- Deep-Sleep-Zyklus (5 Minuten)
 
 ## Wichtige Pins
 
@@ -27,6 +32,21 @@ pio run -t upload
 pio device monitor
 ```
 
-## Nächster Schritt
+## CoinGecko (alle 5 Minuten)
 
-Als nächstes kann ich dir direkt die BTC-Preisabfrage (z. B. CoinGecko API über WLAN) plus Anzeige auf dem e-Paper einbauen.
+In `src/main.cpp` werden beim Aufwachen folgende Werte geholt und ausgegeben. Danach geht der ESP32 für 5 Minuten in Deep Sleep:
+
+- `btc_price_euro`
+- `btc_preis_usd`
+- `btc_marktkapitlasierung`
+- `btc_blockhoehe`
+- `moskauzeit` (Sats pro USD)
+
+### WLAN eintragen
+
+In `include/secrets.h` diese beiden Konstanten setzen:
+
+- `WIFI_SSID`
+- `WIFI_PASSWORD`
+
+`include/secrets.h` ist in `.gitignore` eingetragen und wird nicht zu GitHub gepusht.

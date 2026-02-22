@@ -16,6 +16,19 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.2.0] - 2026-02-22
+
+### Added
+- WLAN-Konfiguration in `include/secrets.h` ausgelagert.
+- `include/secrets.h` von Git-Tracking ausgeschlossen.
+- BTC-Blockhöhe in die Datenerfassung aufgenommen.
+- Moskauzeit (Sats pro USD) berechnet und angezeigt.
+- Anzeige auf dem e-Paper in statischen und dynamischen Bereich aufgeteilt.
+- Deep-Sleep-Zyklus über 5 Minuten nach jeder Aktualisierung integriert.
+
+### Changed
+- README auf aktuellen Funktionsumfang und Version `v0.2.0` aktualisiert.
+
 ## [0.1.1] - 2026-02-22
 
 ### Added
@@ -27,6 +40,7 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Selti55/btc_info/releases/tag/v0.2.0
 [0.1.1]: https://github.com/Selti55/btc_info/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Selti55/btc_info/releases/tag/v0.1.0
