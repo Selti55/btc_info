@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold9pt7b.h>
+#include <Fonts/FreeMonoBold12pt7b.h>
 #include <Fonts/FreeMono9pt7b.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -8,6 +9,9 @@
 #include <ArduinoJson.h>
 #include "secrets.h"
 
+// -----------------------------------------------------------------------------
+// Hardware-Konfiguration
+// -----------------------------------------------------------------------------
 // Waveshare ESP32-S3 1.54" e-Paper (Standard-Pinbelegung, ggf. anpassen)
 constexpr int PIN_EPD_CS = 10;
 constexpr int PIN_EPD_DC = 11;
@@ -17,8 +21,15 @@ constexpr int PIN_EPD_BUSY = 13;
 GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> display(
     GxEPD2_154_D67(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
 
+// Aktualisierungsintervall: 5 Minuten.
+// Dieser Wert wird sowohl für den Datenabruf als auch für den Deep-Sleep-Timer genutzt.
 constexpr unsigned long FETCH_INTERVAL_MS = 5UL * 60UL * 1000UL;
 
+// -----------------------------------------------------------------------------
+// Datenmodell
+// -----------------------------------------------------------------------------
+// Kapselt einen vollständigen Mess-/Abrufzyklus.
+// Damit lassen sich Logging und Display-Zeichnen sauber in einem Objekt bündeln.
 struct BtcSnapshot
 {
   float btcPriceEuro;
@@ -30,6 +41,11 @@ struct BtcSnapshot
   bool blockHeightOk;
 };
 
+// -----------------------------------------------------------------------------
+// Netzwerk
+// -----------------------------------------------------------------------------
+// Baut bei Bedarf eine WLAN-Verbindung auf.
+// Rückgabewert: true bei aktiver Verbindung, sonst false.
 bool connectWifi()
 {
   if (WiFi.status() == WL_CONNECTED)
@@ -66,6 +82,8 @@ bool connectWifi()
   return false;
 }
 
+// Holt Preis- und Market-Cap-Daten über die CoinGecko-API.
+// Ausgabeparameter werden nur bei erfolgreichem Parse mit sinnvollen Werten befüllt.
 bool fetchBtcMarketData(float &btcPriceEur, float &btcPriceUsd, double &btcMarketCapUsd)
 {
   if (WiFi.status() != WL_CONNECTED)
@@ -118,6 +136,8 @@ bool fetchBtcMarketData(float &btcPriceEur, float &btcPriceUsd, double &btcMarke
   return true;
 }
 
+// Holt die aktuelle Bitcoin-Blockhöhe.
+// Verwendet einen sehr einfachen Endpoint, der nur die Blockhöhe als Text liefert.
 bool fetchBtcBlockHeight(uint32_t &blockHeight)
 {
   if (WiFi.status() != WL_CONNECTED)
@@ -160,6 +180,11 @@ bool fetchBtcBlockHeight(uint32_t &blockHeight)
   return true;
 }
 
+// -----------------------------------------------------------------------------
+// Berechnungen / Formatierung
+// -----------------------------------------------------------------------------
+// Moscow Time = Satoshis pro 1 USD.
+// Formel: 100.000.000 sats / BTC-Preis(USD).
 uint32_t calculateMoscowTime(float btcPriceUsd)
 {
   if (btcPriceUsd <= 0.0f)
@@ -171,6 +196,7 @@ uint32_t calculateMoscowTime(float btcPriceUsd)
   return static_cast<uint32_t>(satsPerUsd + 0.5f);
 }
 
+// Formatiert die Market Cap in Milliarden USD für eine kompakte Display-Ausgabe.
 String formatMarketCapBillions(double marketCapUsd)
 {
   if (isnan(marketCapUsd))
@@ -182,6 +208,26 @@ String formatMarketCapBillions(double marketCapUsd)
   return String(valueBn, 2) + "B";
 }
 
+// Zeichnet einen String rechtsbündig an einer definierten rechten Kante.
+// Praktisch für Werte mit wechselnder Ziffernlänge (z. B. BTC-Preis).
+void drawRightAlignedText(const String &text, int16_t rightX, int16_t baselineY)
+{
+  int16_t x1 = 0;
+  int16_t y1 = 0;
+  uint16_t w = 0;
+  uint16_t h = 0;
+  display.getTextBounds(text, 0, baselineY, &x1, &y1, &w, &h);
+
+  const int16_t startX = rightX - static_cast<int16_t>(w);
+  display.setCursor(startX, baselineY);
+  display.print(text);
+}
+
+// -----------------------------------------------------------------------------
+// Display-Ausgabe
+// -----------------------------------------------------------------------------
+// Statischer Layout-Teil: Rahmen, Titel, Labels.
+// Dieser Teil ändert sich zwischen den Zyklen nicht.
 void drawStaticLayout()
 {
   display.fillScreen(GxEPD_WHITE);
@@ -206,21 +252,24 @@ void drawStaticLayout()
   display.println("Moskau:");
 }
 
+// Dynamischer Layout-Teil: Messwerte.
+// Der EUR-Wert wird hervorgehoben (größere Schrift und rechtsbündig),
+// damit der wichtigste Kurswert direkt auffällt.
 void drawDynamicValues(const BtcSnapshot &snapshot)
 {
-  display.setFont(&FreeMono9pt7b);
   display.setTextColor(GxEPD_BLACK);
 
-  display.setCursor(78, 48);
+  display.setFont(&FreeMonoBold12pt7b);
   if (snapshot.pricesOk)
   {
-    display.printf("%.2f", snapshot.btcPriceEuro);
+    drawRightAlignedText(String(snapshot.btcPriceEuro, 2), 194, 56);
   }
   else
   {
-    display.print("n/a");
+    drawRightAlignedText("n/a", 194, 56);
   }
 
+  display.setFont(&FreeMono9pt7b);
   display.setCursor(78, 72);
   if (snapshot.pricesOk)
   {
@@ -262,6 +311,8 @@ void drawDynamicValues(const BtcSnapshot &snapshot)
   }
 }
 
+// Führt die eigentliche e-Paper-Ausgabe aus.
+// Wegen der Display-Technik erfolgt das Zeichnen seitenweise (firstPage/nextPage).
 void drawBtcScreen(const BtcSnapshot &snapshot)
 {
   display.setRotation(0);
@@ -274,6 +325,7 @@ void drawBtcScreen(const BtcSnapshot &snapshot)
   } while (display.nextPage());
 }
 
+// Serielle Diagnoseausgabe für schnelle Kontrolle im Monitor.
 void printSnapshot(const BtcSnapshot &snapshot)
 {
   Serial.println("---- BTC Snapshot ----");
@@ -300,6 +352,16 @@ void printSnapshot(const BtcSnapshot &snapshot)
   Serial.println("----------------------");
 }
 
+// -----------------------------------------------------------------------------
+// Hauptablauf
+// -----------------------------------------------------------------------------
+// Ablauf pro Wakeup:
+// 1) Display initialisieren
+// 2) WLAN verbinden
+// 3) Daten abrufen + berechnen
+// 4) Seriell ausgeben + auf e-Paper zeichnen
+// 5) WLAN abschalten
+// 6) Für 5 Minuten in Deep Sleep gehen
 void setup()
 {
   Serial.begin(115200);
@@ -332,12 +394,14 @@ void setup()
   WiFi.disconnect(true, true);
   WiFi.mode(WIFI_OFF);
 
+  // Deep Sleep: Mikrosekunden erwartet, deshalb *1000 von ms -> us.
   Serial.println("Gehe in Deep Sleep fuer 5 Minuten...");
   Serial.flush();
   esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(FETCH_INTERVAL_MS) * 1000ULL);
   esp_deep_sleep_start();
 }
 
+// loop bleibt leer, weil das Gerät nach setup() direkt in Deep Sleep geht.
 void loop()
 {
 }

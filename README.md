@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.2.0**
+Aktuelle Version: **v0.2.1**
 
 ## Enthalten
 
@@ -11,7 +11,9 @@ Aktuelle Version: **v0.2.0**
 - CoinGecko BTC-Daten (EUR, USD, Market Cap)
 - BTC-Blockhöhe + Moskauzeit (Sats pro USD)
 - e-Paper-Ausgabe mit statischem und dynamischem Bereich
+- Hervorgehobener BTC-EUR-Wert (größer, rechtsbündig)
 - Deep-Sleep-Zyklus (5 Minuten)
+- Ausführlich kommentierter `main.cpp` für einfachere Wartung
 
 ## Wichtige Pins
 
