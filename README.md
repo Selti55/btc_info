@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.14**
+Aktuelle Version: **v0.3.15**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -29,6 +29,13 @@ Aktuelle Version: **v0.3.14**
 - `Kein Display-Update: Kursaenderung = 0.213% (< 0.600%).` → Alles ok; Schwelle wurde bewusst nicht erreicht, daher kein Refresh.
 - `Display-Update: Kursaenderung = 0.942% (Schwelle 0.600%).` → Alles ok; Schwelle überschritten, Display wird neu gezeichnet.
 - `WLAN-Verbindung fehlgeschlagen.` → `WIFI_SSID`/`WIFI_PASSWORD` in `include/secrets.h` prüfen, 2.4-GHz-WLAN aktivieren, Abstand/Signalstärke am Router testen.
+
+### Was ist normal? / Wann eingreifen?
+
+- **Normal:** Viele `Kein Display-Update...`-Meldungen bei höherer Schwelle oder ruhigem Markt.
+- **Normal:** Gelegentlich `NTP-Zeit nicht verfuegbar...` bei kurzer Internetstörung.
+- **Eingreifen:** `WLAN-Verbindung fehlgeschlagen.` über mehrere Zyklen hintereinander.
+- **Eingreifen:** Dauerhaft nur `n/a`-Werte bei Preis/Blockhöhe trotz stabilem WLAN.
 
 ## Enthalten
 
