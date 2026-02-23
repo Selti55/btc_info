@@ -16,6 +16,15 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.8] - 2026-02-23
+
+### Added
+- README um klaren Abschnitt „Vor- und Nachteile der Modi" ergänzt (`sparsam`, `ausgewogen`, `reaktiv`, `nachtmodus`).
+
+### Changed
+- README dokumentiert den Default explizit als `CFG_PROFILE_NACHTMODUS`.
+- README auf Version `v0.3.8` aktualisiert.
+
 ## [0.3.7] - 2026-02-23
 
 ### Changed
@@ -128,7 +137,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.7...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.8...HEAD
+[0.3.8]: https://github.com/Selti55/btc_info/releases/tag/v0.3.8
 [0.3.7]: https://github.com/Selti55/btc_info/releases/tag/v0.3.7
 [0.3.6]: https://github.com/Selti55/btc_info/releases/tag/v0.3.6
 [0.3.5]: https://github.com/Selti55/btc_info/releases/tag/v0.3.5

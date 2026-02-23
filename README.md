@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.7**
+Aktuelle Version: **v0.3.8**
 
 ## Enthalten
 
@@ -83,7 +83,9 @@ Du kannst das Gesamtverhalten jetzt mit **einer** Einstellung steuern:
 
 In `src/main.cpp` einfach die Zeile anpassen:
 
-`#define CFG_PROFILE CFG_PROFILE_AUSGEWOGEN`
+`#define CFG_PROFILE CFG_PROFILE_NACHTMODUS`
+
+**Standard ab Version v0.3.7: `CFG_PROFILE_NACHTMODUS`**
 
 Der Code setzt damit automatisch:
 
@@ -120,6 +122,24 @@ Diese Presets sind fertige Startpunkte. Werte direkt in den passenden `CFG_*`-De
 | Nachtmodus | `10UL * 60UL * 1000UL` | `30UL * 60UL * 1000UL` | `180UL * 60UL * 1000UL` | `0.6f` | Tagsüber normal, nachts besonders stromsparend |
 
 Praxis-Tipp: Erst mit Ausgewogen starten. Danach nur eine Stellschraube gleichzeitig ändern und 24-48 Stunden beobachten.
+
+### Vor- und Nachteile der Modi
+
+#### Sparsam
+- **Vorteile:** maximale Akku-Laufzeit, sehr wenige Display-Refreshs, ideal für lange Offline-Phasen.
+- **Nachteile:** deutlich langsamere Reaktion auf Kursbewegungen, weniger „Live“-Gefühl.
+
+#### Ausgewogen
+- **Vorteile:** guter Mittelweg zwischen Aktualität und Verbrauch, alltagstauglich für die meisten Setups.
+- **Nachteile:** nicht so sparsam wie `sparsam`, nicht so schnell wie `reaktiv`.
+
+#### Reaktiv
+- **Vorteile:** schnellste sichtbare Kursreaktion, häufige Updates für aktive Beobachtung.
+- **Nachteile:** kürzere Akku-Laufzeit, deutlich mehr Display-Refresh-Zyklen.
+
+#### Nachtmodus
+- **Vorteile:** tagsüber brauchbare Aktualität, nachts starke Einsparung; sehr guter Praxis-Kompromiss.
+- **Nachteile:** nachts trägere Anzeige, bei nächtlicher Volatilität weniger Zwischenstände sichtbar.
 
 ### Preset-Empfehlung nach Akkutyp
 
