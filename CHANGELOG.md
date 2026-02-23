@@ -16,6 +16,12 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.7] - 2026-02-23
+
+### Changed
+- Standardprofil in `src/main.cpp` auf `CFG_PROFILE_NACHTMODUS` gesetzt.
+- README auf Version `v0.3.7` aktualisiert.
+
 ## [0.3.6] - 2026-02-23
 
 ### Added
@@ -122,7 +128,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.6...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.7...HEAD
+[0.3.7]: https://github.com/Selti55/btc_info/releases/tag/v0.3.7
 [0.3.6]: https://github.com/Selti55/btc_info/releases/tag/v0.3.6
 [0.3.5]: https://github.com/Selti55/btc_info/releases/tag/v0.3.5
 [0.3.4]: https://github.com/Selti55/btc_info/releases/tag/v0.3.4
