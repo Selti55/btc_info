@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.11**
+Aktuelle Version: **v0.3.12**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -15,6 +15,13 @@ Aktuelle Version: **v0.3.11**
 3. Firmware bauen: `pio run`.
 4. Auf das Board flashen: `pio run -t upload`.
 5. Live-Logs prüfen: `pio device monitor` (zeigt u. a. aktives Profil und Display-Updates).
+
+## Troubleshooting (kurz)
+
+- **Kein WLAN:** `WIFI_SSID` und `WIFI_PASSWORD` in `include/secrets.h` prüfen; Router/Signalstärke testen.
+- **Keine NTP-Zeit:** Internetverbindung prüfen; Gerät fällt auf Fallback-Intervall zurück.
+- **Kein Display-Update:** prüfen, ob Kursänderung die gesetzte Schwelle erreicht (`CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT`).
+- **Build-Fehler:** zuerst `pio run` erneut starten; danach Bibliotheken und `platformio.ini` prüfen.
 
 ## Enthalten
 
