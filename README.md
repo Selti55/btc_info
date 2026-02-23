@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.25**
+Aktuelle Version: **v0.3.26**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -154,6 +154,15 @@ Zusätzlich verfügbar:
 - Statusseite (`/status`) mit Uptime, RSSI und letzten HTTP-Codes
 - JSON-Backup (`/backup`) und JSON-Restore (`/restore`)
 - Werksreset-Button mit Sicherheitsabfrage
+
+### How to test (Portal-Features)
+
+1. **Portal-Start testen:** Gerät resetten (oder bei aktivem Taster-Trigger den Button halten) und mit `BTC-INFO-SETUP` verbinden.
+2. **Login testen:** AP-Passwort aus `CFG_CONFIG_PORTAL_AP_PASSWORD` verwenden.
+3. **Statusseite testen:** `http://192.168.4.1/status` öffnen und prüfen, ob RSSI/HTTP-Codes/Uptime angezeigt werden.
+4. **Speichern testen:** In `/` eine kleine Änderung machen (z. B. Chart-Währung), speichern, Neustart abwarten, dann prüfen, ob der Wert erhalten blieb.
+5. **Backup/Restore testen:** Unter `/backup` JSON sichern, dann über `/restore` wieder einspielen und Übernahme prüfen.
+6. **Werksreset testen:** Button „Werkseinstellungen wiederherstellen“ nutzen, Neustart abwarten, danach prüfen, dass Defaults aktiv sind.
 
 ## Konfiguration
 
