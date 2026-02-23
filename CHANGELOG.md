@@ -16,6 +16,15 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.2] - 2026-02-23
+
+### Added
+- README um eine kompakte Cheat-Sheet-Tabelle ergänzt: „Welchen `#define` ändere ich wofür?".
+- Konkrete Beispielwerte für typische Tuning-Ziele ergänzt (Akkulaufzeit, Display-Refresh-Rate, WLAN-/HTTP-Robustheit).
+
+### Changed
+- README auf Version `v0.3.2` aktualisiert.
+
 ## [0.3.1] - 2026-02-23
 
 ### Added
@@ -76,7 +85,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/Selti55/btc_info/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Selti55/btc_info/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Selti55/btc_info/releases/tag/v0.3.0
 [0.2.1]: https://github.com/Selti55/btc_info/releases/tag/v0.2.1

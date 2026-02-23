@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.1**
+Aktuelle Version: **v0.3.2**
 
 ## Enthalten
 
@@ -70,6 +70,22 @@ Alle wichtigen Stellschrauben stehen gesammelt am **Anfang** von `src/main.cpp` 
 - NTP-/Zeitzonen-Einstellungen (`CFG_TZ_INFO`, `CFG_NTP_SERVER_*`)
 
 Damit kann man das Verhalten ändern, ohne tiefer in die Logik eingreifen zu müssen.
+
+### Cheat-Sheet: Welchen `#define` ändere ich wofür?
+
+| Ziel | Relevanter `#define` | Typischer Wert | Wirkung |
+| --- | --- | --- | --- |
+| Tagsüber seltener abrufen | `CFG_FETCH_INTERVAL_DAY_MS` | `15UL * 60UL * 1000UL` | Weniger WLAN-Aufweckvorgänge, längere Akku-Laufzeit |
+| Abends dichter abrufen | `CFG_FETCH_INTERVAL_EVENING_MS` | `15UL * 60UL * 1000UL` | Mehr Aktualität zwischen 18:00 und 22:00 |
+| Nachts sehr sparsam | `CFG_FETCH_INTERVAL_NIGHT_MS` | `120UL * 60UL * 1000UL` | Stärkste Akku-Einsparung in der Nacht |
+| Zeitfenster verschieben | `CFG_DAY_START_HOUR`, `CFG_EVENING_START_HOUR`, `CFG_NIGHT_START_HOUR` | `6 / 17 / 22` | Startzeiten für Tag/Abend/Nacht ändern |
+| Display häufiger aktualisieren | `CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT` | `0.4f` | Schon kleine Kursänderungen führen zu Refresh |
+| Display stärker schonen | `CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT` | `0.7f` | Weniger Refreshs, längere Display-Lebensdauer |
+| WLAN robuster bei schwachem Empfang | `CFG_WIFI_CONNECT_TIMEOUT_MS` | `30000UL` | Mehr Zeit zum Verbinden, weniger Fehlzyklen |
+| API robuster bei langsamer Antwort | `CFG_HTTP_TIMEOUT_MS` | `15000UL` | Weniger Abbrüche bei langsamer Internetverbindung |
+| Fallback-Verhalten bei fehlender Uhrzeit | `CFG_FETCH_INTERVAL_FALLBACK_MS` | `CFG_FETCH_INTERVAL_EVENING_MS` | Intervall, wenn NTP-Zeit nicht verfügbar ist |
+
+Hinweis: Erst einen Parameter ändern, dann 1-2 Tage beobachten (Display-Refresh-Rate, Akkuverbrauch, WLAN-Stabilität).
 
 ## Grobe Laufzeit-Abschätzung (2500 mAh, 18650)
 
