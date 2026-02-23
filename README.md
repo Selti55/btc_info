@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.12**
+Aktuelle Version: **v0.3.13**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -22,6 +22,12 @@ Aktuelle Version: **v0.3.12**
 - **Keine NTP-Zeit:** Internetverbindung prüfen; Gerät fällt auf Fallback-Intervall zurück.
 - **Kein Display-Update:** prüfen, ob Kursänderung die gesetzte Schwelle erreicht (`CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT`).
 - **Build-Fehler:** zuerst `pio run` erneut starten; danach Bibliotheken und `platformio.ini` prüfen.
+
+### Beispiel-Logzeilen (und Bedeutung)
+
+- `NTP-Zeit nicht verfuegbar, nutze Fallback-Intervall.` → Keine gültige Uhrzeit vom NTP-Server; Gerät nutzt `CFG_FETCH_INTERVAL_FALLBACK_MS`.
+- `Kein Display-Update: Kursaenderung = 0.213% (< 0.600%).` → Alles ok; Schwelle wurde bewusst nicht erreicht, daher kein Refresh.
+- `Display-Update: Kursaenderung = 0.942% (Schwelle 0.600%).` → Alles ok; Schwelle überschritten, Display wird neu gezeichnet.
 
 ## Enthalten
 
