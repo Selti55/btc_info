@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.15**
+Aktuelle Version: **v0.3.16**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -17,6 +17,12 @@ Aktuelle Version: **v0.3.15**
 5. Live-Logs prüfen: `pio device monitor` (zeigt u. a. aktives Profil und Display-Updates).
 
 ## Troubleshooting (kurz)
+
+### Wenn A, dann B (ultrakurz)
+
+- **Wenn** `WLAN-Verbindung fehlgeschlagen.` **dann** WLAN-Daten prüfen + 2.4 GHz aktivieren.
+- **Wenn** `NTP-Zeit nicht verfuegbar...` **dann** Internet prüfen (Fallback ist normal).
+- **Wenn** oft `Kein Display-Update...` **dann** Schwelle ist vermutlich zu hoch oder Markt ruhig.
 
 - **Kein WLAN:** `WIFI_SSID` und `WIFI_PASSWORD` in `include/secrets.h` prüfen; Router/Signalstärke testen.
 - **Keine NTP-Zeit:** Internetverbindung prüfen; Gerät fällt auf Fallback-Intervall zurück.
