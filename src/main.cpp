@@ -11,35 +11,82 @@
 #include "secrets.h"
 
 // -----------------------------------------------------------------------------
-// Hardware-Konfiguration
+// KONFIGURATION (alle anpassbaren Parameter als #define)
 // -----------------------------------------------------------------------------
-// Waveshare ESP32-S3 1.54" e-Paper (Standard-Pinbelegung, ggf. anpassen)
-constexpr int PIN_EPD_CS = 10;
-constexpr int PIN_EPD_DC = 11;
-constexpr int PIN_EPD_RST = 12;
-constexpr int PIN_EPD_BUSY = 13;
+// Nachlesen:
+// - Arduino C/C++ Präprozessor (#define): https://www.arduino.cc/reference/en/language/structure/further-syntax/define/
+// - ESP32 Deep Sleep: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/sleep_modes.html
+// - NTP / Zeitfunktionen (ESP32 Arduino):
+//   https://docs.espressif.com/projects/arduino-esp32/en/latest/api/time.html
+// - CoinGecko API: https://www.coingecko.com/en/api/documentation
+//
+// Idee: Hier oben stehen ALLE zentralen Stellschrauben.
+// Du musst für typische Anpassungen später kaum im restlichen Code suchen.
+// -----------------------------------------------------------------------------
+
+// ------------------------
+// Hardware / Display
+// ------------------------
+#define CFG_PIN_EPD_CS 10
+#define CFG_PIN_EPD_DC 11
+#define CFG_PIN_EPD_RST 12
+#define CFG_PIN_EPD_BUSY 13
+
+// Display-Init-Parameter von GxEPD2:
+// init(serial_baud, initial, reset_duration, pulldown_rst_mode)
+#define CFG_DISPLAY_INIT_BAUD 115200
+#define CFG_DISPLAY_INIT_INITIAL true
+#define CFG_DISPLAY_INIT_RESET_DURATION 2
+#define CFG_DISPLAY_INIT_PULDOWN_RST false
+
+// ------------------------
+// Serielle Ausgabe
+// ------------------------
+#define CFG_SERIAL_BAUD 115200
+#define CFG_BOOT_DELAY_MS 300
+
+// ------------------------
+// WLAN / HTTP / API
+// ------------------------
+#define CFG_WIFI_CONNECT_TIMEOUT_MS 20000UL
+#define CFG_WIFI_CONNECT_RETRY_DELAY_MS 500UL
+#define CFG_HTTP_TIMEOUT_MS 10000UL
+#define CFG_JSON_DOC_SIZE 512
+
+#define CFG_URL_COINGECKO "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur,usd&include_market_cap=true"
+#define CFG_URL_BLOCK_HEIGHT "https://blockchain.info/q/getblockcount"
+
+// ------------------------
+// Zeitsteuerung (lokale Zeit)
+// ------------------------
+#define CFG_TZ_INFO "CET-1CEST,M3.5.0/02,M10.5.0/03"
+#define CFG_NTP_SERVER_PRIMARY "pool.ntp.org"
+#define CFG_NTP_SERVER_SECONDARY "time.nist.gov"
+#define CFG_NTP_MAX_ATTEMPTS 8
+#define CFG_NTP_SINGLE_ATTEMPT_TIMEOUT_MS 1000UL
+
+#define CFG_DAY_START_HOUR 7
+#define CFG_EVENING_START_HOUR 18
+#define CFG_NIGHT_START_HOUR 22
+
+#define CFG_FETCH_INTERVAL_DAY_MS (10UL * 60UL * 1000UL)
+#define CFG_FETCH_INTERVAL_EVENING_MS (30UL * 60UL * 1000UL)
+#define CFG_FETCH_INTERVAL_NIGHT_MS (90UL * 60UL * 1000UL)
+#define CFG_FETCH_INTERVAL_FALLBACK_MS CFG_FETCH_INTERVAL_EVENING_MS
+
+// ------------------------
+// Display-Refresh-Regel
+// ------------------------
+#define CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT 0.5f
+
+// -----------------------------------------------------------------------------
+// Hardware-Objekte
+// -----------------------------------------------------------------------------
+// Waveshare ESP32-S3 1.54" e-Paper (Standard-Pinbelegung)
+// Wenn dein Board anders verdrahtet ist, nur CFG_PIN_* oben anpassen.
 
 GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> display(
-    GxEPD2_154_D67(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
-
-// Dynamische Aktualisierungsintervalle je Tageszeit.
-// - Tag (07:00-18:00): 10 Minuten
-// - Abend (18:00-22:00): 30 Minuten
-// - Nacht (22:00-07:00): 90 Minuten
-constexpr unsigned long FETCH_INTERVAL_DAY_MS = 10UL * 60UL * 1000UL;
-constexpr unsigned long FETCH_INTERVAL_EVENING_MS = 30UL * 60UL * 1000UL;
-constexpr unsigned long FETCH_INTERVAL_NIGHT_MS = 90UL * 60UL * 1000UL;
-
-// Fallback, falls die Uhrzeit nicht verfügbar ist (z. B. NTP nicht erreichbar).
-constexpr unsigned long FETCH_INTERVAL_FALLBACK_MS = FETCH_INTERVAL_EVENING_MS;
-
-// Display wird nur aktualisiert, wenn sich der EUR-Kurs seit der letzten
-// Display-Aktualisierung um mindestens diesen Prozentsatz geändert hat.
-constexpr float DISPLAY_UPDATE_THRESHOLD_PERCENT = 0.5f;
-
-// Zeitzonen-Konfiguration für Deutschland inkl. Sommer-/Winterzeit.
-// Format: POSIX TZ-String.
-constexpr const char *TZ_INFO = "CET-1CEST,M3.5.0/02,M10.5.0/03";
+  GxEPD2_154_D67(CFG_PIN_EPD_CS, CFG_PIN_EPD_DC, CFG_PIN_EPD_RST, CFG_PIN_EPD_BUSY));
 
 // -----------------------------------------------------------------------------
 // Datenmodell
@@ -86,9 +133,9 @@ bool connectWifi()
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   unsigned long startMs = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startMs < 20000)
+  while (WiFi.status() != WL_CONNECTED && millis() - startMs < CFG_WIFI_CONNECT_TIMEOUT_MS)
   {
-    delay(500);
+    delay(CFG_WIFI_CONNECT_RETRY_DELAY_MS);
     Serial.print('.');
   }
   Serial.println();
@@ -117,14 +164,13 @@ bool fetchBtcMarketData(float &btcPriceEur, float &btcPriceUsd, double &btcMarke
   secureClient.setInsecure();
 
   HTTPClient http;
-  const char *url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur,usd&include_market_cap=true";
-  if (!http.begin(secureClient, url))
+  if (!http.begin(secureClient, CFG_URL_COINGECKO))
   {
     Serial.println("HTTP begin fehlgeschlagen.");
     return false;
   }
 
-  http.setTimeout(10000);
+  http.setTimeout(CFG_HTTP_TIMEOUT_MS);
 
   const int httpCode = http.GET();
   if (httpCode != HTTP_CODE_OK)
@@ -137,7 +183,7 @@ bool fetchBtcMarketData(float &btcPriceEur, float &btcPriceUsd, double &btcMarke
   String payload = http.getString();
   http.end();
 
-  StaticJsonDocument<512> doc;
+  StaticJsonDocument<CFG_JSON_DOC_SIZE> doc;
   DeserializationError error = deserializeJson(doc, payload);
   if (error)
   {
@@ -171,14 +217,13 @@ bool fetchBtcBlockHeight(uint32_t &blockHeight)
   secureClient.setInsecure();
 
   HTTPClient http;
-  const char *url = "https://blockchain.info/q/getblockcount";
-  if (!http.begin(secureClient, url))
+  if (!http.begin(secureClient, CFG_URL_BLOCK_HEIGHT))
   {
     Serial.println("Blockhöhe: HTTP begin fehlgeschlagen.");
     return false;
   }
 
-  http.setTimeout(10000);
+  http.setTimeout(CFG_HTTP_TIMEOUT_MS);
   const int httpCode = http.GET();
   if (httpCode != HTTP_CODE_OK)
   {
@@ -206,12 +251,12 @@ bool fetchBtcBlockHeight(uint32_t &blockHeight)
 // Rückgabe: true, wenn eine plausible Uhrzeit gelesen werden konnte.
 bool syncClockFromNtp(tm &localTime)
 {
-  configTzTime(TZ_INFO, "pool.ntp.org", "time.nist.gov");
+  configTzTime(CFG_TZ_INFO, CFG_NTP_SERVER_PRIMARY, CFG_NTP_SERVER_SECONDARY);
 
   // Mehrere kurze Versuche statt eines langen Blockierens.
-  for (int attempt = 0; attempt < 8; ++attempt)
+  for (int attempt = 0; attempt < CFG_NTP_MAX_ATTEMPTS; ++attempt)
   {
-    if (getLocalTime(&localTime, 1000))
+    if (getLocalTime(&localTime, CFG_NTP_SINGLE_ATTEMPT_TIMEOUT_MS))
     {
       return true;
     }
@@ -223,28 +268,28 @@ bool syncClockFromNtp(tm &localTime)
 // Liefert das nächste Abruf-/Sleep-Intervall anhand der lokalen Stunde.
 unsigned long getFetchIntervalMsByHour(int hour)
 {
-  if (hour >= 7 && hour < 18)
+  if (hour >= CFG_DAY_START_HOUR && hour < CFG_EVENING_START_HOUR)
   {
-    return FETCH_INTERVAL_DAY_MS;
+    return CFG_FETCH_INTERVAL_DAY_MS;
   }
 
-  if (hour >= 18 && hour < 22)
+  if (hour >= CFG_EVENING_START_HOUR && hour < CFG_NIGHT_START_HOUR)
   {
-    return FETCH_INTERVAL_EVENING_MS;
+    return CFG_FETCH_INTERVAL_EVENING_MS;
   }
 
-  return FETCH_INTERVAL_NIGHT_MS;
+  return CFG_FETCH_INTERVAL_NIGHT_MS;
 }
 
 // Hilfsfunktion für serielle Statusmeldungen.
 const char *getTimeWindowLabelByHour(int hour)
 {
-  if (hour >= 7 && hour < 18)
+  if (hour >= CFG_DAY_START_HOUR && hour < CFG_EVENING_START_HOUR)
   {
     return "Tag";
   }
 
-  if (hour >= 18 && hour < 22)
+  if (hour >= CFG_EVENING_START_HOUR && hour < CFG_NIGHT_START_HOUR)
   {
     return "Abend";
   }
@@ -269,6 +314,9 @@ uint32_t calculateMoscowTime(float btcPriceUsd)
 }
 
 // Prozentuale Kursänderung zwischen zwei EUR-Kursen.
+// Mathematik: |neu - alt| / alt * 100
+// Nachlesen Prozentrechnung:
+// https://de.wikipedia.org/wiki/Prozentrechnung
 float calculatePercentChange(float oldValue, float newValue)
 {
   if (oldValue <= 0.0f)
@@ -283,7 +331,12 @@ float calculatePercentChange(float oldValue, float newValue)
 // Regeln:
 // 1) Beim ersten gültigen Kurs immer aktualisieren.
 // 2) Ohne gültige Preisdaten ebenfalls aktualisieren (damit "n/a" sichtbar wird).
-// 3) Danach nur, wenn die Kursänderung >= DISPLAY_UPDATE_THRESHOLD_PERCENT ist.
+// 3) Danach nur, wenn die Kursänderung >= CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT ist.
+//
+// Warum Referenzkurs im RTC-Speicher?
+// - Nach Deep Sleep startet der ESP32 softwareseitig neu.
+// - RTC_DATA_ATTR-Variablen bleiben aber erhalten und eignen sich ideal,
+//   um "letzten angezeigten Kurs" über Sleep-Zyklen hinweg zu merken.
 bool shouldUpdateDisplay(const BtcSnapshot &snapshot, float &outPercentChange)
 {
   outPercentChange = 0.0f;
@@ -300,7 +353,7 @@ bool shouldUpdateDisplay(const BtcSnapshot &snapshot, float &outPercentChange)
   }
 
   outPercentChange = calculatePercentChange(g_lastDisplayedPriceEur, snapshot.btcPriceEuro);
-  return outPercentChange >= DISPLAY_UPDATE_THRESHOLD_PERCENT;
+  return outPercentChange >= CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT;
 }
 
 // Formatiert die Market Cap in Milliarden USD für eine kompakte Display-Ausgabe.
@@ -433,6 +486,8 @@ void drawBtcScreen(const BtcSnapshot &snapshot)
 }
 
 // Serielle Diagnoseausgabe für schnelle Kontrolle im Monitor.
+// Tipp für Anfänger:
+// Mit `pio device monitor` kannst du den Ablauf Schritt für Schritt sehen.
 void printSnapshot(const BtcSnapshot &snapshot)
 {
   Serial.println("---- BTC Snapshot ----");
@@ -472,10 +527,15 @@ void printSnapshot(const BtcSnapshot &snapshot)
 // 7) Für das zeitabhängige Intervall in Deep Sleep gehen
 void setup()
 {
-  Serial.begin(115200);
-  delay(300);
+  Serial.begin(CFG_SERIAL_BAUD);
+  delay(CFG_BOOT_DELAY_MS);
 
-  display.init(115200, true, 2, false);
+  // Display initialisieren.
+  // Nachlesen GxEPD2: https://github.com/ZinggJM/GxEPD2
+  display.init(CFG_DISPLAY_INIT_BAUD,
+               CFG_DISPLAY_INIT_INITIAL,
+               CFG_DISPLAY_INIT_RESET_DURATION,
+               CFG_DISPLAY_INIT_PULDOWN_RST);
 
   BtcSnapshot snapshot = {
       NAN,
@@ -486,10 +546,13 @@ void setup()
       false,
       false};
 
-  unsigned long nextFetchIntervalMs = FETCH_INTERVAL_FALLBACK_MS;
+  unsigned long nextFetchIntervalMs = CFG_FETCH_INTERVAL_FALLBACK_MS;
   bool localTimeValid = false;
   tm localTime = {};
 
+  // Wichtig für Anfänger:
+  // Ohne WLAN keine API-Daten und auch keine NTP-Zeit.
+  // Darum hängt die Intervallwahl (Tag/Abend/Nacht) von erfolgreichem WLAN ab.
   if (connectWifi())
   {
     // Uhrzeit holen, damit wir das passende Zeitfenster (Tag/Abend/Nacht) nutzen.
@@ -530,7 +593,7 @@ void setup()
     {
       Serial.printf("Display-Update: Kursaenderung = %.3f%% (Schwelle %.2f%%).\n",
                     percentChange,
-                    DISPLAY_UPDATE_THRESHOLD_PERCENT);
+                    CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT);
     }
 
     drawBtcScreen(snapshot);
@@ -545,7 +608,7 @@ void setup()
   {
     Serial.printf("Kein Display-Update: Kursaenderung = %.3f%% (< %.2f%%).\n",
                   percentChange,
-                  DISPLAY_UPDATE_THRESHOLD_PERCENT);
+                  CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT);
   }
 
   WiFi.disconnect(true, true);

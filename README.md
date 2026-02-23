@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.0**
+Aktuelle Version: **v0.3.1**
 
 ## Enthalten
 
@@ -14,6 +14,7 @@ Aktuelle Version: **v0.3.0**
 - Hervorgehobener BTC-EUR-Wert (größer, rechtsbündig)
 - Zeitabhängiger Deep-Sleep-Zyklus (Tag/Abend/Nacht)
 - Display-Update nur bei Kursänderung >= 0,5 %
+- Zentrale Konfiguration am Anfang von `main.cpp` (alle Hauptparameter als `#define`)
 - Ausführlich kommentierter `main.cpp` für einfachere Wartung
 
 ## Wichtige Pins
@@ -57,6 +58,18 @@ Das e-Paper wird nur dann neu gezeichnet, wenn die EUR-Kursänderung seit der le
 
 - Blockhöhe wird weiterhin abgefragt und im Snapshot geführt.
 - Die Blockhöhe ist **kein** Trigger mehr für ein Display-Update.
+
+## Konfiguration für Einsteiger
+
+Alle wichtigen Stellschrauben stehen gesammelt am **Anfang** von `src/main.cpp` als `#define`:
+
+- Display-Pins (`CFG_PIN_*`)
+- API-/HTTP-Timeouts (`CFG_HTTP_TIMEOUT_MS`, `CFG_WIFI_CONNECT_TIMEOUT_MS`)
+- Zeitfenster (`CFG_FETCH_INTERVAL_*`, `CFG_*_HOUR`)
+- Display-Schwelle (`CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT`)
+- NTP-/Zeitzonen-Einstellungen (`CFG_TZ_INFO`, `CFG_NTP_SERVER_*`)
+
+Damit kann man das Verhalten ändern, ohne tiefer in die Logik eingreifen zu müssen.
 
 ## Grobe Laufzeit-Abschätzung (2500 mAh, 18650)
 
