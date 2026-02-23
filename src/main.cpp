@@ -52,9 +52,28 @@
 #define CFG_WIFI_CONNECT_RETRY_DELAY_MS 500UL
 #define CFG_HTTP_TIMEOUT_MS 10000UL
 #define CFG_JSON_DOC_SIZE 512
+#define CFG_JSON_DOC_SIZE_HISTORY 8192
 
 #define CFG_URL_COINGECKO "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur,usd&include_market_cap=true"
 #define CFG_URL_BLOCK_HEIGHT "https://blockchain.info/q/getblockcount"
+#define CFG_URL_COINGECKO_MARKET_CHART_BASE "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency="
+
+#define CFG_CHART_HISTORY_DAYS 7
+#define CFG_CHART_INTERVAL "daily"
+
+#define CFG_CHART_CURRENCY_EUR 1
+#define CFG_CHART_CURRENCY_USD 2
+#define CFG_CHART_CURRENCY CFG_CHART_CURRENCY_EUR
+
+#if CFG_CHART_CURRENCY == CFG_CHART_CURRENCY_EUR
+#define CFG_CHART_VS_CURRENCY "eur"
+#define CFG_CHART_CURRENCY_LABEL "EUR"
+#elif CFG_CHART_CURRENCY == CFG_CHART_CURRENCY_USD
+#define CFG_CHART_VS_CURRENCY "usd"
+#define CFG_CHART_CURRENCY_LABEL "USD"
+#else
+#error "Ungueltiges CFG_CHART_CURRENCY. Erlaubt: CFG_CHART_CURRENCY_EUR / CFG_CHART_CURRENCY_USD"
+#endif
 
 // ------------------------
 // Zeitsteuerung (lokale Zeit)
@@ -183,8 +202,11 @@ struct BtcSnapshot
   double btcMarketCapUsd;
   uint32_t btcBlockHeight;
   uint32_t moscowTime;
+  float chartHistory7d[CFG_CHART_HISTORY_DAYS];
+  uint8_t chartPointsCount;
   bool pricesOk;
   bool blockHeightOk;
+  bool chartHistoryOk;
 };
 
 // RTC_DATA_ATTR: Diese Variablen bleiben über Deep Sleep hinweg erhalten.
@@ -285,6 +307,81 @@ bool fetchBtcMarketData(float &btcPriceEur, float &btcPriceUsd, double &btcMarke
   }
 
   return true;
+}
+
+// Holt den BTC-Kursverlauf der letzten 7 Tage aus CoinGecko.
+// Die Währung ist über CFG_CHART_CURRENCY umschaltbar (EUR/USD).
+bool fetchBtcHistory7d(float outHistory[CFG_CHART_HISTORY_DAYS], uint8_t &outCount)
+{
+  outCount = 0;
+
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    return false;
+  }
+
+  WiFiClientSecure secureClient;
+  secureClient.setInsecure();
+
+  const String chartUrl = String(CFG_URL_COINGECKO_MARKET_CHART_BASE) +
+                          CFG_CHART_VS_CURRENCY +
+                          "&days=" +
+                          String(CFG_CHART_HISTORY_DAYS) +
+                          "&interval=" +
+                          CFG_CHART_INTERVAL;
+
+  HTTPClient http;
+  if (!http.begin(secureClient, chartUrl))
+  {
+    Serial.println("Chart: HTTP begin fehlgeschlagen.");
+    return false;
+  }
+
+  http.setTimeout(CFG_HTTP_TIMEOUT_MS);
+  const int httpCode = http.GET();
+  if (httpCode != HTTP_CODE_OK)
+  {
+    Serial.printf("Chart HTTP-Fehler: %d\n", httpCode);
+    http.end();
+    return false;
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  DynamicJsonDocument doc(CFG_JSON_DOC_SIZE_HISTORY);
+  DeserializationError error = deserializeJson(doc, payload);
+  if (error)
+  {
+    Serial.printf("Chart JSON-Fehler: %s\n", error.c_str());
+    return false;
+  }
+
+  JsonArray prices = doc["prices"].as<JsonArray>();
+  if (prices.isNull() || prices.size() == 0)
+  {
+    Serial.println("Chart: keine Preisdaten vorhanden.");
+    return false;
+  }
+
+  const size_t totalPoints = prices.size();
+  const size_t pointsToUse = min(static_cast<size_t>(CFG_CHART_HISTORY_DAYS), totalPoints);
+  const size_t startIndex = totalPoints - pointsToUse;
+
+  for (size_t i = 0; i < pointsToUse; ++i)
+  {
+    const float value = prices[startIndex + i][1] | NAN;
+    if (isnan(value) || value <= 0.0f)
+    {
+      Serial.println("Chart: ungueltiger Preiswert.");
+      return false;
+    }
+
+    outHistory[i] = value;
+  }
+
+  outCount = static_cast<uint8_t>(pointsToUse);
+  return outCount > 1;
 }
 
 // Holt die aktuelle Bitcoin-Blockhöhe.
@@ -517,6 +614,69 @@ void drawRightAlignedText(const String &text, int16_t rightX, int16_t baselineY)
   display.print(text);
 }
 
+// Zeichnet eine einfache 7-Tage-Liniengrafik im unteren Displaybereich.
+void drawChartHistory7d(const BtcSnapshot &snapshot)
+{
+  const int16_t chartX = 8;
+  const int16_t chartY = 156;
+  const int16_t chartW = 184;
+  const int16_t chartH = 36;
+
+  display.drawRect(chartX, chartY, chartW, chartH, GxEPD_BLACK);
+
+  display.setFont(&FreeMono9pt7b);
+  display.setCursor(10, 154);
+  display.print("7T ");
+  display.print(CFG_CHART_CURRENCY_LABEL);
+
+  if (!snapshot.chartHistoryOk || snapshot.chartPointsCount < 2)
+  {
+    display.setCursor(chartX + 58, chartY + 24);
+    display.print("n/a");
+    return;
+  }
+
+  float minValue = snapshot.chartHistory7d[0];
+  float maxValue = snapshot.chartHistory7d[0];
+
+  for (uint8_t i = 1; i < snapshot.chartPointsCount; ++i)
+  {
+    minValue = min(minValue, snapshot.chartHistory7d[i]);
+    maxValue = max(maxValue, snapshot.chartHistory7d[i]);
+  }
+
+  float span = maxValue - minValue;
+  if (span < 0.001f)
+  {
+    span = 1.0f;
+  }
+
+  const int16_t innerLeft = chartX + 2;
+  const int16_t innerRight = chartX + chartW - 3;
+  const int16_t innerTop = chartY + 2;
+  const int16_t innerBottom = chartY + chartH - 3;
+
+  for (uint8_t i = 1; i < snapshot.chartPointsCount; ++i)
+  {
+    const float prev = snapshot.chartHistory7d[i - 1];
+    const float curr = snapshot.chartHistory7d[i];
+
+    const float prevRatio = static_cast<float>(i - 1) / static_cast<float>(snapshot.chartPointsCount - 1);
+    const float currRatio = static_cast<float>(i) / static_cast<float>(snapshot.chartPointsCount - 1);
+
+    const int16_t x1 = innerLeft + static_cast<int16_t>((innerRight - innerLeft) * prevRatio + 0.5f);
+    const int16_t x2 = innerLeft + static_cast<int16_t>((innerRight - innerLeft) * currRatio + 0.5f);
+
+    const float prevYRatio = (prev - minValue) / span;
+    const float currYRatio = (curr - minValue) / span;
+
+    const int16_t y1 = innerBottom - static_cast<int16_t>((innerBottom - innerTop) * prevYRatio + 0.5f);
+    const int16_t y2 = innerBottom - static_cast<int16_t>((innerBottom - innerTop) * currYRatio + 0.5f);
+
+    display.drawLine(x1, y1, x2, y2, GxEPD_BLACK);
+  }
+}
+
 // -----------------------------------------------------------------------------
 // Display-Ausgabe
 // -----------------------------------------------------------------------------
@@ -603,6 +763,8 @@ void drawDynamicValues(const BtcSnapshot &snapshot)
   {
     display.print("n/a");
   }
+
+  drawChartHistory7d(snapshot);
 }
 
 // Führt die eigentliche e-Paper-Ausgabe aus.
@@ -645,6 +807,16 @@ void printSnapshot(const BtcSnapshot &snapshot)
   {
     Serial.println("btc_blockhoehe: n/a");
   }
+
+  if (snapshot.chartHistoryOk)
+  {
+    Serial.printf("chart_7d_%s: %u punkte\n", CFG_CHART_VS_CURRENCY, snapshot.chartPointsCount);
+  }
+  else
+  {
+    Serial.printf("chart_7d_%s: n/a\n", CFG_CHART_VS_CURRENCY);
+  }
+
   Serial.println("----------------------");
 }
 
@@ -681,6 +853,9 @@ void setup()
       NAN,
       0,
       0,
+      {NAN, NAN, NAN, NAN, NAN, NAN, NAN},
+      0,
+      false,
       false,
       false};
 
@@ -710,6 +885,7 @@ void setup()
 
     snapshot.pricesOk = fetchBtcMarketData(snapshot.btcPriceEuro, snapshot.btcPriceUsd, snapshot.btcMarketCapUsd);
     snapshot.blockHeightOk = fetchBtcBlockHeight(snapshot.btcBlockHeight);
+    snapshot.chartHistoryOk = fetchBtcHistory7d(snapshot.chartHistory7d, snapshot.chartPointsCount);
     if (snapshot.pricesOk)
     {
       snapshot.moscowTime = calculateMoscowTime(snapshot.btcPriceUsd);

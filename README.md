@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.19**
+Aktuelle Version: **v0.3.20**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -63,6 +63,7 @@ Aktuelle Version: **v0.3.19**
 - Zeitabhängiger Deep-Sleep-Zyklus (Tag/Abend/Nacht)
 - Dynamischer Deep-Sleep-Faktor nach Kursänderung (nichtlineare Kurve)
 - Ein-Schalter-Dynamik-Preset (`ruhig` / `normal` / `trading`)
+- 7-Tage-Kursgrafik auf dem Display (umschaltbar EUR/USD)
 - Display-Update nur bei Kursänderung >= 0,5 %
 - Zentrale Konfiguration am Anfang von `main.cpp` (alle Hauptparameter als `#define`)
 - Ausführlich kommentierter `main.cpp` für einfachere Wartung
@@ -118,6 +119,19 @@ Das Basis-Intervall aus dem Zeitfenster (Tag/Abend/Nacht) wird zusätzlich dynam
 
 Die Dynamik arbeitet mit einer **nichtlinearen Kurve** und separaten Grenzen für Tag/Abend/Nacht.
 So bleibt das System tagsüber reaktiv und nachts deutlich ruhiger.
+
+### 7-Tage-Kursgrafik (neu)
+
+Im unteren Bereich wird eine Liniengrafik des BTC-Kursverlaufs der letzten 7 Tage gezeichnet.
+
+- Standardwährung: `EUR`
+- Umschaltbar auf `USD` über den Konfig-Schalter `CFG_CHART_CURRENCY`
+
+In `src/main.cpp` stehen dafür:
+
+- `CFG_CHART_CURRENCY_EUR`
+- `CFG_CHART_CURRENCY_USD`
+- `CFG_CHART_CURRENCY`
 
 ## Konfiguration
 

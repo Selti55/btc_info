@@ -16,6 +16,17 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.20] - 2026-02-23
+
+### Added
+- 7-Tage-Kursgrafik auf dem ePaper ergänzt (Linienverlauf im unteren Displaybereich).
+- Abruf historischer CoinGecko-Kursdaten (`market_chart`) für den 7-Tage-Verlauf ergänzt.
+- Währungsumschalter für die Grafik ergänzt: `CFG_CHART_CURRENCY_EUR` / `CFG_CHART_CURRENCY_USD`.
+
+### Changed
+- README um Doku zur neuen 7-Tage-Grafik und zur EUR/USD-Umschaltung erweitert.
+- README auf Version `v0.3.20` aktualisiert.
+
 ## [0.3.19] - 2026-02-23
 
 ### Added
@@ -228,7 +239,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.19...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.20...HEAD
+[0.3.20]: https://github.com/Selti55/btc_info/releases/tag/v0.3.20
 [0.3.19]: https://github.com/Selti55/btc_info/releases/tag/v0.3.19
 [0.3.18]: https://github.com/Selti55/btc_info/releases/tag/v0.3.18
 [0.3.17]: https://github.com/Selti55/btc_info/releases/tag/v0.3.17
