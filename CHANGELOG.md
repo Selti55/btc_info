@@ -16,6 +16,12 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.18] - 2026-02-23
+
+### Changed
+- README-Überschriften gestrafft und im Inhaltsverzeichnis vereinheitlicht (kürzere, konsistente Titel).
+- README auf Version `v0.3.18` aktualisiert.
+
 ## [0.3.17] - 2026-02-23
 
 ### Added
@@ -209,7 +215,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.17...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.18...HEAD
+[0.3.18]: https://github.com/Selti55/btc_info/releases/tag/v0.3.18
 [0.3.17]: https://github.com/Selti55/btc_info/releases/tag/v0.3.17
 [0.3.16]: https://github.com/Selti55/btc_info/releases/tag/v0.3.16
 [0.3.15]: https://github.com/Selti55/btc_info/releases/tag/v0.3.15

@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.17**
+Aktuelle Version: **v0.3.18**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -11,11 +11,11 @@ Aktuelle Version: **v0.3.17**
 ## Inhaltsverzeichnis
 
 - [Quickstart in 60 Sekunden](#quickstart-in-60-sekunden)
-- [Troubleshooting (kurz)](#troubleshooting-kurz)
-- [Abruf- und Display-Logik](#abruf--und-display-logik)
-- [Konfiguration für Einsteiger](#konfiguration-für-einsteiger)
-- [Presets und Modi](#presets-sparsam-ausgewogen-reaktiv-nachtmodus)
-- [Preset-Empfehlung nach Akkutyp](#preset-empfehlung-nach-akkutyp)
+- [Troubleshooting](#troubleshooting)
+- [Logik](#logik)
+- [Konfiguration](#konfiguration)
+- [Presets](#presets)
+- [Akku-Empfehlung](#akku-empfehlung)
 
 ## Quickstart in 60 Sekunden
 
@@ -25,7 +25,7 @@ Aktuelle Version: **v0.3.17**
 4. Auf das Board flashen: `pio run -t upload`.
 5. Live-Logs prüfen: `pio device monitor` (zeigt u. a. aktives Profil und Display-Updates).
 
-## Troubleshooting (kurz)
+## Troubleshooting
 
 ### Wenn A, dann B (ultrakurz)
 
@@ -84,7 +84,7 @@ pio run -t upload
 pio device monitor
 ```
 
-## Abruf- und Display-Logik
+## Logik
 
 In `src/main.cpp` werden beim Aufwachen folgende Werte geholt und ausgegeben:
 
@@ -107,7 +107,7 @@ Das e-Paper wird nur dann neu gezeichnet, wenn die EUR-Kursänderung seit der le
 - Blockhöhe wird weiterhin abgefragt und im Snapshot geführt.
 - Die Blockhöhe ist **kein** Trigger mehr für ein Display-Update.
 
-## Konfiguration für Einsteiger
+## Konfiguration
 
 Alle wichtigen Stellschrauben stehen gesammelt am **Anfang** von `src/main.cpp` als `#define`:
 
@@ -158,7 +158,7 @@ Der Code setzt damit automatisch:
 
 Hinweis: Erst einen Parameter ändern, dann 1-2 Tage beobachten (Display-Refresh-Rate, Akkuverbrauch, WLAN-Stabilität).
 
-### Presets: sparsam, ausgewogen, reaktiv, nachtmodus
+### Presets
 
 Diese Presets sind fertige Startpunkte. Werte direkt in den passenden `CFG_*`-Defines setzen.
 
@@ -197,7 +197,7 @@ Praxis-Tipp: Erst mit Ausgewogen starten. Danach nur eine Stellschraube gleichze
 
 Wenn du nachts besonders sparen willst, tagsüber aber normal schauen möchtest, nimm `nachtmodus` (Default).
 
-### Preset-Empfehlung nach Akkutyp
+### Akku-Empfehlung
 
 Die Werte sind grobe Praxisbereiche und hängen stark von WLAN-Qualität, Temperatur und API-Latenz ab.
 
