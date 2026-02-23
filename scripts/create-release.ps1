@@ -2,7 +2,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
 
-    [string]$Target = "main"
+    [string]$Target = "main",
+
+    [switch]$GenerateNotes
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,9 +14,16 @@ if ($Version -notmatch '^v\d+\.\d+\.\d+$') {
 }
 
 $templatePath = ".github/release-notes-template.md"
-if (-not (Test-Path $templatePath)) {
-    throw "Template nicht gefunden: $templatePath"
+
+if ($GenerateNotes) {
+    gh release create $Version --target $Target --title $Version --generate-notes
+}
+else {
+    if (-not (Test-Path $templatePath)) {
+        throw "Template nicht gefunden: $templatePath"
+    }
+
+    gh release create $Version --target $Target --title $Version --notes-file $templatePath
 }
 
-gh release create $Version --target $Target --title $Version --notes-file $templatePath
 gh release view $Version --json url,name
