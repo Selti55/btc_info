@@ -245,6 +245,7 @@ AppSettings g_settings;
 Preferences g_preferences;
 WebServer g_configServer(80);
 bool g_configSaved = false;
+bool g_factoryResetRequested = false;
 
 const char *getChartVsCurrency(uint8_t chartCurrency);
 
@@ -693,7 +694,7 @@ String buildConfigPageHtml()
   html += "<title>BTC Info Setup</title>";
   html += "<style>body{font-family:Arial,sans-serif;max-width:760px;margin:20px auto;padding:0 12px;}";
   html += "label{display:block;margin-top:12px;font-weight:600;}input,select{width:100%;padding:8px;margin-top:4px;}";
-  html += "button{margin-top:16px;padding:10px 14px;font-weight:700;}small{color:#555;}</style></head><body>";
+  html += "button{margin-top:16px;padding:10px 14px;font-weight:700;}button.danger{background:#fff;border:2px solid #111;}small{color:#555;}</style></head><body>";
   html += "<h2>BTC Info Konfiguration</h2><p>Werte werden dauerhaft gespeichert und beim nächsten Reset als Default geladen.</p>";
   html += "<form method='POST' action='/save'>";
 
@@ -729,7 +730,11 @@ String buildConfigPageHtml()
   html += "<label>Display-Schwelle (%)</label><input type='number' step='0.1' min='0.1' max='20' name='disp_thr' value='" + String(g_settings.displayUpdateThresholdPercent, 2) + "'>";
 
   html += "<button type='submit'>Speichern & Neustarten</button>";
-  html += "</form><p><small>AP SSID: " CFG_CONFIG_PORTAL_AP_SSID " | URL: http://192.168.4.1</small></p></body></html>";
+  html += "</form>";
+  html += "<form method='POST' action='/factory-reset' onsubmit='return confirm(\"Alle gespeicherten Einstellungen wirklich loeschen?\");'>";
+  html += "<button type='submit' class='danger'>Werkseinstellungen wiederherstellen</button>";
+  html += "</form>";
+  html += "<p><small>AP SSID: " CFG_CONFIG_PORTAL_AP_SSID " | URL: http://192.168.4.1</small></p></body></html>";
   return html;
 }
 
@@ -770,6 +775,25 @@ void handleConfigSave()
                       "<html><body><h3>Gespeichert.</h3><p>Der ESP32 startet neu.</p></body></html>");
 }
 
+void handleFactoryReset()
+{
+  if (!g_preferences.begin("btc_cfg", false))
+  {
+    g_configServer.send(500, "text/html", "<html><body><h3>Fehler</h3><p>Preferences konnten nicht geoeffnet werden.</p></body></html>");
+    return;
+  }
+
+  g_preferences.clear();
+  g_preferences.end();
+
+  g_factoryResetRequested = true;
+  g_configSaved = true;
+
+  g_configServer.send(200,
+                      "text/html",
+                      "<html><body><h3>Werkseinstellungen wiederhergestellt.</h3><p>Der ESP32 startet neu.</p></body></html>");
+}
+
 bool shouldStartConfigPortalOnThisBoot()
 {
   if (!CFG_CONFIG_PORTAL_ON_RESET)
@@ -796,9 +820,11 @@ void runConfigPortalIfNeeded()
   Serial.println(WiFi.softAPIP());
 
   g_configSaved = false;
+  g_factoryResetRequested = false;
   g_configServer.on("/", HTTP_GET, []()
                     { g_configServer.send(200, "text/html", buildConfigPageHtml()); });
   g_configServer.on("/save", HTTP_POST, handleConfigSave);
+  g_configServer.on("/factory-reset", HTTP_POST, handleFactoryReset);
   g_configServer.begin();
 
   const unsigned long startMs = millis();
@@ -814,7 +840,14 @@ void runConfigPortalIfNeeded()
 
   if (g_configSaved)
   {
-    Serial.println("Konfiguration gespeichert. Neustart...");
+    if (g_factoryResetRequested)
+    {
+      Serial.println("Werkseinstellungen wiederhergestellt. Neustart...");
+    }
+    else
+    {
+      Serial.println("Konfiguration gespeichert. Neustart...");
+    }
     delay(800);
     ESP.restart();
   }
