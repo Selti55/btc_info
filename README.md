@@ -2,11 +2,20 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.16**
+Aktuelle Version: **v0.3.17**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
 > Das ist in der Praxis meist der beste Kompromiss aus Aktualität am Tag und Stromsparen in der Nacht.
+
+## Inhaltsverzeichnis
+
+- [Quickstart in 60 Sekunden](#quickstart-in-60-sekunden)
+- [Troubleshooting (kurz)](#troubleshooting-kurz)
+- [Abruf- und Display-Logik](#abruf--und-display-logik)
+- [Konfiguration für Einsteiger](#konfiguration-für-einsteiger)
+- [Presets und Modi](#presets-sparsam-ausgewogen-reaktiv-nachtmodus)
+- [Preset-Empfehlung nach Akkutyp](#preset-empfehlung-nach-akkutyp)
 
 ## Quickstart in 60 Sekunden
 
