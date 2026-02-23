@@ -7,6 +7,7 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <time.h>
 #include "secrets.h"
 
 // -----------------------------------------------------------------------------
@@ -21,9 +22,24 @@ constexpr int PIN_EPD_BUSY = 13;
 GxEPD2_BW<GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT> display(
     GxEPD2_154_D67(PIN_EPD_CS, PIN_EPD_DC, PIN_EPD_RST, PIN_EPD_BUSY));
 
-// Aktualisierungsintervall: 5 Minuten.
-// Dieser Wert wird sowohl für den Datenabruf als auch für den Deep-Sleep-Timer genutzt.
-constexpr unsigned long FETCH_INTERVAL_MS = 5UL * 60UL * 1000UL;
+// Dynamische Aktualisierungsintervalle je Tageszeit.
+// - Tag (07:00-18:00): 10 Minuten
+// - Abend (18:00-22:00): 30 Minuten
+// - Nacht (22:00-07:00): 90 Minuten
+constexpr unsigned long FETCH_INTERVAL_DAY_MS = 10UL * 60UL * 1000UL;
+constexpr unsigned long FETCH_INTERVAL_EVENING_MS = 30UL * 60UL * 1000UL;
+constexpr unsigned long FETCH_INTERVAL_NIGHT_MS = 90UL * 60UL * 1000UL;
+
+// Fallback, falls die Uhrzeit nicht verfügbar ist (z. B. NTP nicht erreichbar).
+constexpr unsigned long FETCH_INTERVAL_FALLBACK_MS = FETCH_INTERVAL_EVENING_MS;
+
+// Display wird nur aktualisiert, wenn sich der EUR-Kurs seit der letzten
+// Display-Aktualisierung um mindestens diesen Prozentsatz geändert hat.
+constexpr float DISPLAY_UPDATE_THRESHOLD_PERCENT = 0.5f;
+
+// Zeitzonen-Konfiguration für Deutschland inkl. Sommer-/Winterzeit.
+// Format: POSIX TZ-String.
+constexpr const char *TZ_INFO = "CET-1CEST,M3.5.0/02,M10.5.0/03";
 
 // -----------------------------------------------------------------------------
 // Datenmodell
@@ -40,6 +56,12 @@ struct BtcSnapshot
   bool pricesOk;
   bool blockHeightOk;
 };
+
+// RTC_DATA_ATTR: Diese Variablen bleiben über Deep Sleep hinweg erhalten.
+// So wissen wir beim nächsten Wakeup, welcher EUR-Kurs zuletzt wirklich
+// auf dem Display sichtbar war.
+RTC_DATA_ATTR float g_lastDisplayedPriceEur = NAN;
+RTC_DATA_ATTR bool g_hasDisplayedPrice = false;
 
 // -----------------------------------------------------------------------------
 // Netzwerk
@@ -180,6 +202,56 @@ bool fetchBtcBlockHeight(uint32_t &blockHeight)
   return true;
 }
 
+// Synchronisiert die ESP32-Uhr via NTP.
+// Rückgabe: true, wenn eine plausible Uhrzeit gelesen werden konnte.
+bool syncClockFromNtp(tm &localTime)
+{
+  configTzTime(TZ_INFO, "pool.ntp.org", "time.nist.gov");
+
+  // Mehrere kurze Versuche statt eines langen Blockierens.
+  for (int attempt = 0; attempt < 8; ++attempt)
+  {
+    if (getLocalTime(&localTime, 1000))
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Liefert das nächste Abruf-/Sleep-Intervall anhand der lokalen Stunde.
+unsigned long getFetchIntervalMsByHour(int hour)
+{
+  if (hour >= 7 && hour < 18)
+  {
+    return FETCH_INTERVAL_DAY_MS;
+  }
+
+  if (hour >= 18 && hour < 22)
+  {
+    return FETCH_INTERVAL_EVENING_MS;
+  }
+
+  return FETCH_INTERVAL_NIGHT_MS;
+}
+
+// Hilfsfunktion für serielle Statusmeldungen.
+const char *getTimeWindowLabelByHour(int hour)
+{
+  if (hour >= 7 && hour < 18)
+  {
+    return "Tag";
+  }
+
+  if (hour >= 18 && hour < 22)
+  {
+    return "Abend";
+  }
+
+  return "Nacht";
+}
+
 // -----------------------------------------------------------------------------
 // Berechnungen / Formatierung
 // -----------------------------------------------------------------------------
@@ -194,6 +266,41 @@ uint32_t calculateMoscowTime(float btcPriceUsd)
 
   const float satsPerUsd = 100000000.0f / btcPriceUsd;
   return static_cast<uint32_t>(satsPerUsd + 0.5f);
+}
+
+// Prozentuale Kursänderung zwischen zwei EUR-Kursen.
+float calculatePercentChange(float oldValue, float newValue)
+{
+  if (oldValue <= 0.0f)
+  {
+    return INFINITY;
+  }
+
+  return fabsf((newValue - oldValue) / oldValue) * 100.0f;
+}
+
+// Entscheidet, ob das Display aktualisiert werden soll.
+// Regeln:
+// 1) Beim ersten gültigen Kurs immer aktualisieren.
+// 2) Ohne gültige Preisdaten ebenfalls aktualisieren (damit "n/a" sichtbar wird).
+// 3) Danach nur, wenn die Kursänderung >= DISPLAY_UPDATE_THRESHOLD_PERCENT ist.
+bool shouldUpdateDisplay(const BtcSnapshot &snapshot, float &outPercentChange)
+{
+  outPercentChange = 0.0f;
+
+  if (!snapshot.pricesOk)
+  {
+    return true;
+  }
+
+  if (!g_hasDisplayedPrice || isnan(g_lastDisplayedPriceEur))
+  {
+    outPercentChange = INFINITY;
+    return true;
+  }
+
+  outPercentChange = calculatePercentChange(g_lastDisplayedPriceEur, snapshot.btcPriceEuro);
+  return outPercentChange >= DISPLAY_UPDATE_THRESHOLD_PERCENT;
 }
 
 // Formatiert die Market Cap in Milliarden USD für eine kompakte Display-Ausgabe.
@@ -358,10 +465,11 @@ void printSnapshot(const BtcSnapshot &snapshot)
 // Ablauf pro Wakeup:
 // 1) Display initialisieren
 // 2) WLAN verbinden
-// 3) Daten abrufen + berechnen
-// 4) Seriell ausgeben + auf e-Paper zeichnen
-// 5) WLAN abschalten
-// 6) Für 5 Minuten in Deep Sleep gehen
+// 3) Uhrzeit (NTP) synchronisieren -> Intervall bestimmen
+// 4) Daten abrufen + berechnen
+// 5) Nur bei >= 0,5% Kursänderung Display aktualisieren
+// 6) WLAN abschalten
+// 7) Für das zeitabhängige Intervall in Deep Sleep gehen
 void setup()
 {
   Serial.begin(115200);
@@ -378,8 +486,27 @@ void setup()
       false,
       false};
 
+  unsigned long nextFetchIntervalMs = FETCH_INTERVAL_FALLBACK_MS;
+  bool localTimeValid = false;
+  tm localTime = {};
+
   if (connectWifi())
   {
+    // Uhrzeit holen, damit wir das passende Zeitfenster (Tag/Abend/Nacht) nutzen.
+    localTimeValid = syncClockFromNtp(localTime);
+    if (localTimeValid)
+    {
+      nextFetchIntervalMs = getFetchIntervalMsByHour(localTime.tm_hour);
+      Serial.printf("Lokale Uhrzeit: %02d:%02d, Zeitfenster: %s\n",
+                    localTime.tm_hour,
+                    localTime.tm_min,
+                    getTimeWindowLabelByHour(localTime.tm_hour));
+    }
+    else
+    {
+      Serial.println("NTP-Zeit nicht verfuegbar, nutze Fallback-Intervall.");
+    }
+
     snapshot.pricesOk = fetchBtcMarketData(snapshot.btcPriceEuro, snapshot.btcPriceUsd, snapshot.btcMarketCapUsd);
     snapshot.blockHeightOk = fetchBtcBlockHeight(snapshot.btcBlockHeight);
     if (snapshot.pricesOk)
@@ -389,15 +516,46 @@ void setup()
   }
 
   printSnapshot(snapshot);
-  drawBtcScreen(snapshot);
+
+  float percentChange = 0.0f;
+  const bool updateDisplay = shouldUpdateDisplay(snapshot, percentChange);
+
+  if (updateDisplay)
+  {
+    if (isinf(percentChange))
+    {
+      Serial.println("Display-Update: erster gueltiger Kurs oder keine vorherige Anzeige.");
+    }
+    else
+    {
+      Serial.printf("Display-Update: Kursaenderung = %.3f%% (Schwelle %.2f%%).\n",
+                    percentChange,
+                    DISPLAY_UPDATE_THRESHOLD_PERCENT);
+    }
+
+    drawBtcScreen(snapshot);
+
+    if (snapshot.pricesOk)
+    {
+      g_lastDisplayedPriceEur = snapshot.btcPriceEuro;
+      g_hasDisplayedPrice = true;
+    }
+  }
+  else
+  {
+    Serial.printf("Kein Display-Update: Kursaenderung = %.3f%% (< %.2f%%).\n",
+                  percentChange,
+                  DISPLAY_UPDATE_THRESHOLD_PERCENT);
+  }
 
   WiFi.disconnect(true, true);
   WiFi.mode(WIFI_OFF);
 
   // Deep Sleep: Mikrosekunden erwartet, deshalb *1000 von ms -> us.
-  Serial.println("Gehe in Deep Sleep fuer 5 Minuten...");
+  Serial.printf("Gehe in Deep Sleep fuer %lu Minuten...\n",
+                static_cast<unsigned long>(nextFetchIntervalMs / 60000UL));
   Serial.flush();
-  esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(FETCH_INTERVAL_MS) * 1000ULL);
+  esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(nextFetchIntervalMs) * 1000ULL);
   esp_deep_sleep_start();
 }
 
