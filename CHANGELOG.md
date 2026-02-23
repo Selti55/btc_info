@@ -16,6 +16,17 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.21] - 2026-02-23
+
+### Added
+- Konfigurations-Webseite ergänzt, die bei Reset automatisch gestartet wird (Setup-AP + Webformular).
+- Persistente Speicherung der Einstellungen via Preferences ergänzt.
+
+### Changed
+- Gespeicherte Einstellungen werden beim erneuten Aufruf der Webseite als vorausgefüllte Defaults angezeigt.
+- Laufzeitkonfiguration für WLAN, Profil, Dynamik-Preset, Chart-Währung, Zeitfenster und Intervallwerte integriert.
+- README auf Version `v0.3.21` aktualisiert.
+
 ## [0.3.20] - 2026-02-23
 
 ### Added
@@ -239,7 +250,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.20...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.21...HEAD
+[0.3.21]: https://github.com/Selti55/btc_info/releases/tag/v0.3.21
 [0.3.20]: https://github.com/Selti55/btc_info/releases/tag/v0.3.20
 [0.3.19]: https://github.com/Selti55/btc_info/releases/tag/v0.3.19
 [0.3.18]: https://github.com/Selti55/btc_info/releases/tag/v0.3.18

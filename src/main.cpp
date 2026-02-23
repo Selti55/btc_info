@@ -6,8 +6,11 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <WebServer.h>
+#include <Preferences.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include <esp_system.h>
 #include "secrets.h"
 
 // -----------------------------------------------------------------------------
@@ -44,6 +47,11 @@
 // ------------------------
 #define CFG_SERIAL_BAUD 115200
 #define CFG_BOOT_DELAY_MS 300
+
+// Konfigurations-Portal nach Reset
+#define CFG_CONFIG_PORTAL_ON_RESET true
+#define CFG_CONFIG_PORTAL_TIMEOUT_MS 180000UL
+#define CFG_CONFIG_PORTAL_AP_SSID "BTC-INFO-SETUP"
 
 // ------------------------
 // WLAN / HTTP / API
@@ -209,6 +217,37 @@ struct BtcSnapshot
   bool chartHistoryOk;
 };
 
+struct AppSettings
+{
+  String wifiSsid;
+  String wifiPassword;
+  uint8_t profile;
+  uint8_t dynamicPreset;
+  uint8_t chartCurrency;
+  int dayStartHour;
+  int eveningStartHour;
+  int nightStartHour;
+  unsigned long fetchIntervalDayMs;
+  unsigned long fetchIntervalEveningMs;
+  unsigned long fetchIntervalNightMs;
+  float displayUpdateThresholdPercent;
+  float dynamicSleepMinFactorDay;
+  float dynamicSleepMaxFactorDay;
+  float dynamicSleepMinFactorEvening;
+  float dynamicSleepMaxFactorEvening;
+  float dynamicSleepMinFactorNight;
+  float dynamicSleepMaxFactorNight;
+  float dynamicSleepCurveExpHigh;
+  float dynamicSleepCurveExpLow;
+};
+
+AppSettings g_settings;
+Preferences g_preferences;
+WebServer g_configServer(80);
+bool g_configSaved = false;
+
+const char *getChartVsCurrency(uint8_t chartCurrency);
+
 // RTC_DATA_ATTR: Diese Variablen bleiben über Deep Sleep hinweg erhalten.
 // So wissen wir beim nächsten Wakeup, welcher EUR-Kurs zuletzt wirklich
 // auf dem Display sichtbar war.
@@ -227,15 +266,15 @@ bool connectWifi()
     return true;
   }
 
-  if (String(WIFI_SSID).length() == 0 || String(WIFI_PASSWORD).length() == 0)
+  if (g_settings.wifiSsid.length() == 0 || g_settings.wifiPassword.length() == 0)
   {
-    Serial.println("WLAN nicht konfiguriert. Bitte WIFI_SSID/WIFI_PASSWORD setzen.");
+    Serial.println("WLAN nicht konfiguriert. Bitte SSID/Passwort im Konfig-Portal setzen.");
     return false;
   }
 
-  Serial.printf("Verbinde mit WLAN: %s\n", WIFI_SSID);
+  Serial.printf("Verbinde mit WLAN: %s\n", g_settings.wifiSsid.c_str());
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(g_settings.wifiSsid.c_str(), g_settings.wifiPassword.c_str());
 
   unsigned long startMs = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startMs < CFG_WIFI_CONNECT_TIMEOUT_MS)
@@ -324,7 +363,7 @@ bool fetchBtcHistory7d(float outHistory[CFG_CHART_HISTORY_DAYS], uint8_t &outCou
   secureClient.setInsecure();
 
   const String chartUrl = String(CFG_URL_COINGECKO_MARKET_CHART_BASE) +
-                          CFG_CHART_VS_CURRENCY +
+                          getChartVsCurrency(g_settings.chartCurrency) +
                           "&days=" +
                           String(CFG_CHART_HISTORY_DAYS) +
                           "&interval=" +
@@ -445,31 +484,371 @@ bool syncClockFromNtp(tm &localTime)
   return false;
 }
 
+const char *getProfileName(uint8_t profile)
+{
+  switch (profile)
+  {
+  case CFG_PROFILE_SPARSAM:
+    return "Sparsam";
+  case CFG_PROFILE_AUSGEWOGEN:
+    return "Ausgewogen";
+  case CFG_PROFILE_REAKTIV:
+    return "Reaktiv";
+  case CFG_PROFILE_NACHTMODUS:
+    return "Nachtmodus";
+  default:
+    return "Unbekannt";
+  }
+}
+
+const char *getDynamicPresetName(uint8_t preset)
+{
+  switch (preset)
+  {
+  case CFG_DYNAMIC_CURVE_PRESET_RUHIG:
+    return "ruhig";
+  case CFG_DYNAMIC_CURVE_PRESET_NORMAL:
+    return "normal";
+  case CFG_DYNAMIC_CURVE_PRESET_TRADING:
+    return "trading";
+  default:
+    return "normal";
+  }
+}
+
+const char *getChartCurrencyLabel(uint8_t chartCurrency)
+{
+  return (chartCurrency == CFG_CHART_CURRENCY_USD) ? "USD" : "EUR";
+}
+
+const char *getChartVsCurrency(uint8_t chartCurrency)
+{
+  return (chartCurrency == CFG_CHART_CURRENCY_USD) ? "usd" : "eur";
+}
+
+unsigned long minutesToMs(uint16_t minutes)
+{
+  return static_cast<unsigned long>(minutes) * 60UL * 1000UL;
+}
+
+void applyProfileTemplateToSettings(uint8_t profile, AppSettings &settings)
+{
+  settings.profile = profile;
+
+  switch (profile)
+  {
+  case CFG_PROFILE_SPARSAM:
+    settings.fetchIntervalDayMs = minutesToMs(20);
+    settings.fetchIntervalEveningMs = minutesToMs(45);
+    settings.fetchIntervalNightMs = minutesToMs(120);
+    settings.displayUpdateThresholdPercent = 0.8f;
+    break;
+  case CFG_PROFILE_REAKTIV:
+    settings.fetchIntervalDayMs = minutesToMs(5);
+    settings.fetchIntervalEveningMs = minutesToMs(10);
+    settings.fetchIntervalNightMs = minutesToMs(30);
+    settings.displayUpdateThresholdPercent = 0.3f;
+    break;
+  case CFG_PROFILE_NACHTMODUS:
+    settings.fetchIntervalDayMs = minutesToMs(10);
+    settings.fetchIntervalEveningMs = minutesToMs(30);
+    settings.fetchIntervalNightMs = minutesToMs(180);
+    settings.displayUpdateThresholdPercent = 0.6f;
+    break;
+  case CFG_PROFILE_AUSGEWOGEN:
+  default:
+    settings.fetchIntervalDayMs = minutesToMs(10);
+    settings.fetchIntervalEveningMs = minutesToMs(30);
+    settings.fetchIntervalNightMs = minutesToMs(90);
+    settings.displayUpdateThresholdPercent = 0.5f;
+    settings.profile = CFG_PROFILE_AUSGEWOGEN;
+    break;
+  }
+}
+
+void applyDynamicPresetToSettings(uint8_t preset, AppSettings &settings)
+{
+  settings.dynamicPreset = preset;
+
+  switch (preset)
+  {
+  case CFG_DYNAMIC_CURVE_PRESET_RUHIG:
+    settings.dynamicSleepCurveExpHigh = 1.15f;
+    settings.dynamicSleepCurveExpLow = 1.05f;
+    break;
+  case CFG_DYNAMIC_CURVE_PRESET_TRADING:
+    settings.dynamicSleepCurveExpHigh = 1.70f;
+    settings.dynamicSleepCurveExpLow = 1.30f;
+    break;
+  case CFG_DYNAMIC_CURVE_PRESET_NORMAL:
+  default:
+    settings.dynamicSleepCurveExpHigh = 1.35f;
+    settings.dynamicSleepCurveExpLow = 1.20f;
+    settings.dynamicPreset = CFG_DYNAMIC_CURVE_PRESET_NORMAL;
+    break;
+  }
+}
+
+void sanitizeSettings(AppSettings &settings)
+{
+  settings.chartCurrency = (settings.chartCurrency == CFG_CHART_CURRENCY_USD) ? CFG_CHART_CURRENCY_USD : CFG_CHART_CURRENCY_EUR;
+
+  settings.dayStartHour = constrain(settings.dayStartHour, 0, 23);
+  settings.eveningStartHour = constrain(settings.eveningStartHour, 0, 23);
+  settings.nightStartHour = constrain(settings.nightStartHour, 0, 23);
+
+  settings.fetchIntervalDayMs = constrain(settings.fetchIntervalDayMs, minutesToMs(1), minutesToMs(24 * 60));
+  settings.fetchIntervalEveningMs = constrain(settings.fetchIntervalEveningMs, minutesToMs(1), minutesToMs(24 * 60));
+  settings.fetchIntervalNightMs = constrain(settings.fetchIntervalNightMs, minutesToMs(1), minutesToMs(24 * 60));
+
+  settings.displayUpdateThresholdPercent = constrain(settings.displayUpdateThresholdPercent, 0.1f, 20.0f);
+
+  settings.dynamicSleepMinFactorDay = CFG_DYNAMIC_SLEEP_MIN_FACTOR_DAY;
+  settings.dynamicSleepMaxFactorDay = CFG_DYNAMIC_SLEEP_MAX_FACTOR_DAY;
+  settings.dynamicSleepMinFactorEvening = CFG_DYNAMIC_SLEEP_MIN_FACTOR_EVENING;
+  settings.dynamicSleepMaxFactorEvening = CFG_DYNAMIC_SLEEP_MAX_FACTOR_EVENING;
+  settings.dynamicSleepMinFactorNight = CFG_DYNAMIC_SLEEP_MIN_FACTOR_NIGHT;
+  settings.dynamicSleepMaxFactorNight = CFG_DYNAMIC_SLEEP_MAX_FACTOR_NIGHT;
+}
+
+void loadSettingsFromPreferences()
+{
+  g_settings.wifiSsid = WIFI_SSID;
+  g_settings.wifiPassword = WIFI_PASSWORD;
+  g_settings.profile = CFG_PROFILE;
+  g_settings.dynamicPreset = CFG_DYNAMIC_CURVE_PRESET;
+  g_settings.chartCurrency = CFG_CHART_CURRENCY;
+  g_settings.dayStartHour = CFG_DAY_START_HOUR;
+  g_settings.eveningStartHour = CFG_EVENING_START_HOUR;
+  g_settings.nightStartHour = CFG_NIGHT_START_HOUR;
+
+  applyProfileTemplateToSettings(g_settings.profile, g_settings);
+  applyDynamicPresetToSettings(g_settings.dynamicPreset, g_settings);
+  sanitizeSettings(g_settings);
+
+  if (!g_preferences.begin("btc_cfg", true))
+  {
+    Serial.println("Preferences (read) konnte nicht geoeffnet werden.");
+    return;
+  }
+
+  g_settings.wifiSsid = g_preferences.getString("wifi_ssid", g_settings.wifiSsid);
+  g_settings.wifiPassword = g_preferences.getString("wifi_pwd", g_settings.wifiPassword);
+
+  const uint8_t savedProfile = static_cast<uint8_t>(g_preferences.getUChar("profile", g_settings.profile));
+  const uint8_t savedDynPreset = static_cast<uint8_t>(g_preferences.getUChar("dyn_preset", g_settings.dynamicPreset));
+  const uint8_t savedChartCurrency = static_cast<uint8_t>(g_preferences.getUChar("chart_cur", g_settings.chartCurrency));
+
+  applyProfileTemplateToSettings(savedProfile, g_settings);
+  applyDynamicPresetToSettings(savedDynPreset, g_settings);
+
+  g_settings.chartCurrency = savedChartCurrency;
+  g_settings.dayStartHour = g_preferences.getInt("h_day", g_settings.dayStartHour);
+  g_settings.eveningStartHour = g_preferences.getInt("h_even", g_settings.eveningStartHour);
+  g_settings.nightStartHour = g_preferences.getInt("h_night", g_settings.nightStartHour);
+  g_settings.fetchIntervalDayMs = static_cast<unsigned long>(g_preferences.getUInt("i_day_m", g_settings.fetchIntervalDayMs / 60000UL)) * 60000UL;
+  g_settings.fetchIntervalEveningMs = static_cast<unsigned long>(g_preferences.getUInt("i_even_m", g_settings.fetchIntervalEveningMs / 60000UL)) * 60000UL;
+  g_settings.fetchIntervalNightMs = static_cast<unsigned long>(g_preferences.getUInt("i_night_m", g_settings.fetchIntervalNightMs / 60000UL)) * 60000UL;
+  g_settings.displayUpdateThresholdPercent = g_preferences.getFloat("disp_thr", g_settings.displayUpdateThresholdPercent);
+
+  g_preferences.end();
+  sanitizeSettings(g_settings);
+}
+
+void saveSettingsToPreferences(const AppSettings &settings)
+{
+  if (!g_preferences.begin("btc_cfg", false))
+  {
+    Serial.println("Preferences (write) konnte nicht geoeffnet werden.");
+    return;
+  }
+
+  g_preferences.putString("wifi_ssid", settings.wifiSsid);
+  g_preferences.putString("wifi_pwd", settings.wifiPassword);
+  g_preferences.putUChar("profile", settings.profile);
+  g_preferences.putUChar("dyn_preset", settings.dynamicPreset);
+  g_preferences.putUChar("chart_cur", settings.chartCurrency);
+  g_preferences.putInt("h_day", settings.dayStartHour);
+  g_preferences.putInt("h_even", settings.eveningStartHour);
+  g_preferences.putInt("h_night", settings.nightStartHour);
+  g_preferences.putUInt("i_day_m", settings.fetchIntervalDayMs / 60000UL);
+  g_preferences.putUInt("i_even_m", settings.fetchIntervalEveningMs / 60000UL);
+  g_preferences.putUInt("i_night_m", settings.fetchIntervalNightMs / 60000UL);
+  g_preferences.putFloat("disp_thr", settings.displayUpdateThresholdPercent);
+
+  g_preferences.end();
+}
+
+String selectedIf(bool selected)
+{
+  return selected ? " selected" : "";
+}
+
+String buildConfigPageHtml()
+{
+  String html;
+  html.reserve(5000);
+  html += "<!doctype html><html><head><meta charset='utf-8'>";
+  html += "<meta name='viewport' content='width=device-width,initial-scale=1'>";
+  html += "<title>BTC Info Setup</title>";
+  html += "<style>body{font-family:Arial,sans-serif;max-width:760px;margin:20px auto;padding:0 12px;}";
+  html += "label{display:block;margin-top:12px;font-weight:600;}input,select{width:100%;padding:8px;margin-top:4px;}";
+  html += "button{margin-top:16px;padding:10px 14px;font-weight:700;}small{color:#555;}</style></head><body>";
+  html += "<h2>BTC Info Konfiguration</h2><p>Werte werden dauerhaft gespeichert und beim nächsten Reset als Default geladen.</p>";
+  html += "<form method='POST' action='/save'>";
+
+  html += "<label>WLAN SSID</label><input name='wifi_ssid' value='" + g_settings.wifiSsid + "'>";
+  html += "<label>WLAN Passwort</label><input type='password' name='wifi_pwd' value='" + g_settings.wifiPassword + "'>";
+
+  html += "<label>Profil</label><select name='profile'>";
+  html += "<option value='1'" + selectedIf(g_settings.profile == CFG_PROFILE_SPARSAM) + ">Sparsam</option>";
+  html += "<option value='2'" + selectedIf(g_settings.profile == CFG_PROFILE_AUSGEWOGEN) + ">Ausgewogen</option>";
+  html += "<option value='3'" + selectedIf(g_settings.profile == CFG_PROFILE_REAKTIV) + ">Reaktiv</option>";
+  html += "<option value='4'" + selectedIf(g_settings.profile == CFG_PROFILE_NACHTMODUS) + ">Nachtmodus</option>";
+  html += "</select>";
+
+  html += "<label>Dynamik-Preset</label><select name='dyn_preset'>";
+  html += "<option value='1'" + selectedIf(g_settings.dynamicPreset == CFG_DYNAMIC_CURVE_PRESET_RUHIG) + ">ruhig</option>";
+  html += "<option value='2'" + selectedIf(g_settings.dynamicPreset == CFG_DYNAMIC_CURVE_PRESET_NORMAL) + ">normal</option>";
+  html += "<option value='3'" + selectedIf(g_settings.dynamicPreset == CFG_DYNAMIC_CURVE_PRESET_TRADING) + ">trading</option>";
+  html += "</select>";
+
+  html += "<label>Chart-Waehrung</label><select name='chart_cur'>";
+  html += "<option value='1'" + selectedIf(g_settings.chartCurrency == CFG_CHART_CURRENCY_EUR) + ">EUR</option>";
+  html += "<option value='2'" + selectedIf(g_settings.chartCurrency == CFG_CHART_CURRENCY_USD) + ">USD</option>";
+  html += "</select>";
+
+  html += "<label>Tag Startstunde (0-23)</label><input type='number' min='0' max='23' name='h_day' value='" + String(g_settings.dayStartHour) + "'>";
+  html += "<label>Abend Startstunde (0-23)</label><input type='number' min='0' max='23' name='h_even' value='" + String(g_settings.eveningStartHour) + "'>";
+  html += "<label>Nacht Startstunde (0-23)</label><input type='number' min='0' max='23' name='h_night' value='" + String(g_settings.nightStartHour) + "'>";
+
+  html += "<label>Intervall Tag (Minuten)</label><input type='number' min='1' max='1440' name='i_day_m' value='" + String(g_settings.fetchIntervalDayMs / 60000UL) + "'>";
+  html += "<label>Intervall Abend (Minuten)</label><input type='number' min='1' max='1440' name='i_even_m' value='" + String(g_settings.fetchIntervalEveningMs / 60000UL) + "'>";
+  html += "<label>Intervall Nacht (Minuten)</label><input type='number' min='1' max='1440' name='i_night_m' value='" + String(g_settings.fetchIntervalNightMs / 60000UL) + "'>";
+
+  html += "<label>Display-Schwelle (%)</label><input type='number' step='0.1' min='0.1' max='20' name='disp_thr' value='" + String(g_settings.displayUpdateThresholdPercent, 2) + "'>";
+
+  html += "<button type='submit'>Speichern & Neustarten</button>";
+  html += "</form><p><small>AP SSID: " CFG_CONFIG_PORTAL_AP_SSID " | URL: http://192.168.4.1</small></p></body></html>";
+  return html;
+}
+
+void handleConfigSave()
+{
+  AppSettings updated = g_settings;
+
+  updated.wifiSsid = g_configServer.arg("wifi_ssid");
+  updated.wifiPassword = g_configServer.arg("wifi_pwd");
+
+  const uint8_t profile = static_cast<uint8_t>(g_configServer.arg("profile").toInt());
+  applyProfileTemplateToSettings(profile, updated);
+
+  const uint8_t dynPreset = static_cast<uint8_t>(g_configServer.arg("dyn_preset").toInt());
+  applyDynamicPresetToSettings(dynPreset, updated);
+
+  updated.chartCurrency = static_cast<uint8_t>(g_configServer.arg("chart_cur").toInt());
+  updated.dayStartHour = g_configServer.arg("h_day").toInt();
+  updated.eveningStartHour = g_configServer.arg("h_even").toInt();
+  updated.nightStartHour = g_configServer.arg("h_night").toInt();
+
+  const uint16_t dayMinutes = static_cast<uint16_t>(g_configServer.arg("i_day_m").toInt());
+  const uint16_t eveningMinutes = static_cast<uint16_t>(g_configServer.arg("i_even_m").toInt());
+  const uint16_t nightMinutes = static_cast<uint16_t>(g_configServer.arg("i_night_m").toInt());
+
+  updated.fetchIntervalDayMs = minutesToMs(dayMinutes);
+  updated.fetchIntervalEveningMs = minutesToMs(eveningMinutes);
+  updated.fetchIntervalNightMs = minutesToMs(nightMinutes);
+  updated.displayUpdateThresholdPercent = g_configServer.arg("disp_thr").toFloat();
+
+  sanitizeSettings(updated);
+  g_settings = updated;
+  saveSettingsToPreferences(g_settings);
+
+  g_configSaved = true;
+  g_configServer.send(200,
+                      "text/html",
+                      "<html><body><h3>Gespeichert.</h3><p>Der ESP32 startet neu.</p></body></html>");
+}
+
+bool shouldStartConfigPortalOnThisBoot()
+{
+  if (!CFG_CONFIG_PORTAL_ON_RESET)
+  {
+    return false;
+  }
+
+  return esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER;
+}
+
+void runConfigPortalIfNeeded()
+{
+  if (!shouldStartConfigPortalOnThisBoot())
+  {
+    return;
+  }
+
+  Serial.println("Starte Konfigurations-Portal (Reset erkannt)...");
+
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(CFG_CONFIG_PORTAL_AP_SSID);
+
+  Serial.print("Portal-IP: ");
+  Serial.println(WiFi.softAPIP());
+
+  g_configSaved = false;
+  g_configServer.on("/", HTTP_GET, []()
+                    { g_configServer.send(200, "text/html", buildConfigPageHtml()); });
+  g_configServer.on("/save", HTTP_POST, handleConfigSave);
+  g_configServer.begin();
+
+  const unsigned long startMs = millis();
+  while (!g_configSaved && (millis() - startMs) < CFG_CONFIG_PORTAL_TIMEOUT_MS)
+  {
+    g_configServer.handleClient();
+    delay(10);
+  }
+
+  g_configServer.stop();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_OFF);
+
+  if (g_configSaved)
+  {
+    Serial.println("Konfiguration gespeichert. Neustart...");
+    delay(800);
+    ESP.restart();
+  }
+  else
+  {
+    Serial.println("Konfigurations-Portal Timeout. Starte mit vorhandenen Einstellungen.");
+  }
+}
+
 // Liefert das nächste Abruf-/Sleep-Intervall anhand der lokalen Stunde.
 unsigned long getFetchIntervalMsByHour(int hour)
 {
-  if (hour >= CFG_DAY_START_HOUR && hour < CFG_EVENING_START_HOUR)
+  if (hour >= g_settings.dayStartHour && hour < g_settings.eveningStartHour)
   {
-    return CFG_FETCH_INTERVAL_DAY_MS;
+    return g_settings.fetchIntervalDayMs;
   }
 
-  if (hour >= CFG_EVENING_START_HOUR && hour < CFG_NIGHT_START_HOUR)
+  if (hour >= g_settings.eveningStartHour && hour < g_settings.nightStartHour)
   {
-    return CFG_FETCH_INTERVAL_EVENING_MS;
+    return g_settings.fetchIntervalEveningMs;
   }
 
-  return CFG_FETCH_INTERVAL_NIGHT_MS;
+  return g_settings.fetchIntervalNightMs;
 }
 
 // Hilfsfunktion für serielle Statusmeldungen.
 const char *getTimeWindowLabelByHour(int hour)
 {
-  if (hour >= CFG_DAY_START_HOUR && hour < CFG_EVENING_START_HOUR)
+  if (hour >= g_settings.dayStartHour && hour < g_settings.eveningStartHour)
   {
     return "Tag";
   }
 
-  if (hour >= CFG_EVENING_START_HOUR && hour < CFG_NIGHT_START_HOUR)
+  if (hour >= g_settings.eveningStartHour && hour < g_settings.nightStartHour)
   {
     return "Abend";
   }
@@ -523,35 +902,35 @@ unsigned long calculateDynamicSleepIntervalMs(unsigned long baseIntervalMs,
                                               int localHour)
 {
   if (!pricesOk || !hasReferencePrice || isnan(percentChange) || isinf(percentChange) ||
-      CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT <= 0.0f)
+      g_settings.displayUpdateThresholdPercent <= 0.0f)
   {
     return baseIntervalMs;
   }
 
-  float minFactor = CFG_DYNAMIC_SLEEP_MIN_FACTOR_EVENING;
-  float maxFactor = CFG_DYNAMIC_SLEEP_MAX_FACTOR_EVENING;
+  float minFactor = g_settings.dynamicSleepMinFactorEvening;
+  float maxFactor = g_settings.dynamicSleepMaxFactorEvening;
 
-  if (localHour >= CFG_DAY_START_HOUR && localHour < CFG_EVENING_START_HOUR)
+  if (localHour >= g_settings.dayStartHour && localHour < g_settings.eveningStartHour)
   {
-    minFactor = CFG_DYNAMIC_SLEEP_MIN_FACTOR_DAY;
-    maxFactor = CFG_DYNAMIC_SLEEP_MAX_FACTOR_DAY;
+    minFactor = g_settings.dynamicSleepMinFactorDay;
+    maxFactor = g_settings.dynamicSleepMaxFactorDay;
   }
-  else if (localHour >= CFG_NIGHT_START_HOUR || localHour < CFG_DAY_START_HOUR)
+  else if (localHour >= g_settings.nightStartHour || localHour < g_settings.dayStartHour)
   {
-    minFactor = CFG_DYNAMIC_SLEEP_MIN_FACTOR_NIGHT;
-    maxFactor = CFG_DYNAMIC_SLEEP_MAX_FACTOR_NIGHT;
+    minFactor = g_settings.dynamicSleepMinFactorNight;
+    maxFactor = g_settings.dynamicSleepMaxFactorNight;
   }
 
-  const float ratio = percentChange / CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT;
+  const float ratio = percentChange / g_settings.displayUpdateThresholdPercent;
   float factor = 1.0f;
 
   if (ratio >= 1.0f)
   {
-    factor = 1.0f / powf(ratio, CFG_DYNAMIC_SLEEP_CURVE_EXP_HIGH);
+    factor = 1.0f / powf(ratio, g_settings.dynamicSleepCurveExpHigh);
   }
   else
   {
-    factor = 1.0f + powf(1.0f - ratio, CFG_DYNAMIC_SLEEP_CURVE_EXP_LOW);
+    factor = 1.0f + powf(1.0f - ratio, g_settings.dynamicSleepCurveExpLow);
   }
 
   factor = constrain(factor, minFactor, maxFactor);
@@ -584,7 +963,7 @@ bool shouldUpdateDisplay(const BtcSnapshot &snapshot, float &outPercentChange)
   }
 
   outPercentChange = calculatePercentChange(g_lastDisplayedPriceEur, snapshot.btcPriceEuro);
-  return outPercentChange >= CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT;
+  return outPercentChange >= g_settings.displayUpdateThresholdPercent;
 }
 
 // Formatiert die Market Cap in Milliarden USD für eine kompakte Display-Ausgabe.
@@ -627,7 +1006,7 @@ void drawChartHistory7d(const BtcSnapshot &snapshot)
   display.setFont(&FreeMono9pt7b);
   display.setCursor(10, 154);
   display.print("7T ");
-  display.print(CFG_CHART_CURRENCY_LABEL);
+  display.print(getChartCurrencyLabel(g_settings.chartCurrency));
 
   if (!snapshot.chartHistoryOk || snapshot.chartPointsCount < 2)
   {
@@ -810,11 +1189,11 @@ void printSnapshot(const BtcSnapshot &snapshot)
 
   if (snapshot.chartHistoryOk)
   {
-    Serial.printf("chart_7d_%s: %u punkte\n", CFG_CHART_VS_CURRENCY, snapshot.chartPointsCount);
+    Serial.printf("chart_7d_%s: %u punkte\n", getChartVsCurrency(g_settings.chartCurrency), snapshot.chartPointsCount);
   }
   else
   {
-    Serial.printf("chart_7d_%s: n/a\n", CFG_CHART_VS_CURRENCY);
+    Serial.printf("chart_7d_%s: n/a\n", getChartVsCurrency(g_settings.chartCurrency));
   }
 
   Serial.println("----------------------");
@@ -837,8 +1216,12 @@ void setup()
   Serial.begin(CFG_SERIAL_BAUD);
   delay(CFG_BOOT_DELAY_MS);
 
-  Serial.printf("Aktives Profil: %s\n", CFG_PROFILE_NAME);
-  Serial.printf("Dynamik-Preset: %s\n", CFG_DYNAMIC_CURVE_PRESET_NAME);
+  loadSettingsFromPreferences();
+  runConfigPortalIfNeeded();
+
+  Serial.printf("Aktives Profil: %s\n", getProfileName(g_settings.profile));
+  Serial.printf("Dynamik-Preset: %s\n", getDynamicPresetName(g_settings.dynamicPreset));
+  Serial.printf("Chart-Waehrung: %s\n", getChartCurrencyLabel(g_settings.chartCurrency));
 
   // Display initialisieren.
   // Nachlesen GxEPD2: https://github.com/ZinggJM/GxEPD2
@@ -859,7 +1242,7 @@ void setup()
       false,
       false};
 
-  unsigned long nextFetchIntervalMs = CFG_FETCH_INTERVAL_FALLBACK_MS;
+  unsigned long nextFetchIntervalMs = g_settings.fetchIntervalEveningMs;
   bool localTimeValid = false;
   tm localTime = {};
 
@@ -896,7 +1279,7 @@ void setup()
 
   float percentChange = 0.0f;
   const bool updateDisplay = shouldUpdateDisplay(snapshot, percentChange);
-  const int sleepHour = localTimeValid ? localTime.tm_hour : CFG_EVENING_START_HOUR;
+  const int sleepHour = localTimeValid ? localTime.tm_hour : g_settings.eveningStartHour;
 
   if (updateDisplay)
   {
@@ -908,7 +1291,7 @@ void setup()
     {
       Serial.printf("Display-Update: Kursaenderung = %.3f%% (Schwelle %.2f%%).\n",
                     percentChange,
-                    CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT);
+                    g_settings.displayUpdateThresholdPercent);
     }
 
     drawBtcScreen(snapshot);
@@ -923,7 +1306,7 @@ void setup()
   {
     Serial.printf("Kein Display-Update: Kursaenderung = %.3f%% (< %.2f%%).\n",
                   percentChange,
-                  CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT);
+                  g_settings.displayUpdateThresholdPercent);
   }
 
   const bool hasReferencePrice = g_hasDisplayedPrice && !isnan(g_lastDisplayedPriceEur);

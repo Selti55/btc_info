@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.20**
+Aktuelle Version: **v0.3.21**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -64,6 +64,7 @@ Aktuelle Version: **v0.3.20**
 - Dynamischer Deep-Sleep-Faktor nach Kursänderung (nichtlineare Kurve)
 - Ein-Schalter-Dynamik-Preset (`ruhig` / `normal` / `trading`)
 - 7-Tage-Kursgrafik auf dem Display (umschaltbar EUR/USD)
+- Web-Konfigurationsseite bei Reset (gespeicherte Werte als Default im Formular)
 - Display-Update nur bei Kursänderung >= 0,5 %
 - Zentrale Konfiguration am Anfang von `main.cpp` (alle Hauptparameter als `#define`)
 - Ausführlich kommentierter `main.cpp` für einfachere Wartung
@@ -132,6 +133,17 @@ In `src/main.cpp` stehen dafür:
 - `CFG_CHART_CURRENCY_EUR`
 - `CFG_CHART_CURRENCY_USD`
 - `CFG_CHART_CURRENCY`
+
+### Web-Konfiguration bei Reset (neu)
+
+Bei einem normalen Reset (nicht Deep-Sleep-Wakeup) startet der ESP32 ein Setup-AP und eine Konfigurationsseite:
+
+- AP-SSID: `BTC-INFO-SETUP`
+- URL: `http://192.168.4.1`
+- Timeout: `CFG_CONFIG_PORTAL_TIMEOUT_MS`
+
+Über die Seite können u. a. WLAN, Profil, Dynamik-Preset, Chart-Währung, Zeitfenster, Intervalle und Display-Schwelle gesetzt werden.
+Alle Werte werden persistent gespeichert und beim nächsten Reset als vorausgefüllte Defaults angezeigt.
 
 ## Konfiguration
 
