@@ -304,3 +304,11 @@ In `include/secrets.h` diese beiden Konstanten setzen:
 - `WIFI_PASSWORD`
 
 `include/secrets.h` ist in `.gitignore` eingetragen und wird nicht zu GitHub gepusht.
+
+## Known Limitations
+
+- API-Verfügbarkeit und Rate-Limits können Datenabrufe verzögern oder temporär auf Fallback-Werte umschalten.
+- Die 7-Tage-Grafik hängt von externen API-Daten ab; bei Ausfall/Timeout kann sie `n/a` anzeigen.
+- SoftAP-Reichweite und Stabilität sind hardware- und umgebungsabhängig (Antenne, Störungen, Abstand).
+- Partielle Display-Updates können je nach Panel bei längerer Laufzeit leichtes Ghosting zeigen (periodischer Full-Refresh ist aktiv).
+- JSON-Restore erwartet gültiges Format; fehlerhafte Inhalte werden abgewiesen.
