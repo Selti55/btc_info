@@ -16,6 +16,14 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.10] - 2026-02-23
+
+### Added
+- README um eine kompakte TL;DR-Box ergänzt (Standardempfehlung: `CFG_PROFILE_NACHTMODUS`).
+
+### Changed
+- README auf Version `v0.3.10` aktualisiert.
+
 ## [0.3.9] - 2026-02-23
 
 ### Added
@@ -145,7 +153,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.9...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.10...HEAD
+[0.3.10]: https://github.com/Selti55/btc_info/releases/tag/v0.3.10
 [0.3.9]: https://github.com/Selti55/btc_info/releases/tag/v0.3.9
 [0.3.8]: https://github.com/Selti55/btc_info/releases/tag/v0.3.8
 [0.3.7]: https://github.com/Selti55/btc_info/releases/tag/v0.3.7
