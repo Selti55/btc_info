@@ -14,6 +14,34 @@
 #include "secrets.h"
 
 // -----------------------------------------------------------------------------
+// CODE-LANDKARTE (für schnellen Einstieg)
+// -----------------------------------------------------------------------------
+// 1) Konfiguration (#define):
+//    Alle Standardwerte (Pins, API, Profile, Sleep-Logik, Portal) stehen ganz oben.
+//
+// 2) Runtime-Einstellungen (AppSettings + Preferences):
+//    - loadSettingsFromPreferences(): lädt gespeicherte Werte oder Defaults.
+//    - saveSettingsToPreferences(): speichert Formularwerte dauerhaft.
+//    - sanitizeSettings(): begrenzt Werte auf sichere Bereiche.
+//
+// 3) Konfigurations-Portal (Reset-Setup):
+//    - runConfigPortalIfNeeded(): startet SoftAP + lokale Webseite bei Reset.
+//    - handleConfigSave(): übernimmt Formularwerte.
+//    - handleFactoryReset(): löscht gespeicherte Einstellungen.
+//
+// 4) Datenabruf:
+//    - fetchBtcMarketData(), fetchBtcBlockHeight(), fetchBtcHistory7d().
+//
+// 5) Berechnung + Anzeige:
+//    - shouldUpdateDisplay(), calculateDynamicSleepIntervalMs().
+//    - drawBtcScreen(): zeichnet Werte + 7-Tage-Chart auf ePaper.
+//
+// 6) setup()-Ablauf:
+//    Einstellungen laden -> optional Portal -> WLAN/NTP -> Daten holen ->
+//    ggf. Display-Update -> Deep Sleep.
+// -----------------------------------------------------------------------------
+
+// -----------------------------------------------------------------------------
 // KONFIGURATION (alle anpassbaren Parameter als #define)
 // -----------------------------------------------------------------------------
 // Nachlesen:

@@ -16,6 +16,14 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.24] - 2026-02-23
+
+### Added
+- Kompakte "Code-Landkarte" am Anfang von `src/main.cpp` ergänzt (schneller Überblick für Einsteiger).
+
+### Changed
+- README auf Version `v0.3.24` aktualisiert.
+
 ## [0.3.23] - 2026-02-23
 
 ### Added
@@ -271,7 +279,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.23...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.24...HEAD
+[0.3.24]: https://github.com/Selti55/btc_info/releases/tag/v0.3.24
 [0.3.23]: https://github.com/Selti55/btc_info/releases/tag/v0.3.23
 [0.3.22]: https://github.com/Selti55/btc_info/releases/tag/v0.3.22
 [0.3.21]: https://github.com/Selti55/btc_info/releases/tag/v0.3.21
