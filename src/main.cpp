@@ -89,6 +89,13 @@
 #define CFG_CONFIG_PORTAL_ON_RESET true
 #define CFG_CONFIG_PORTAL_TIMEOUT_MS 180000UL
 #define CFG_CONFIG_PORTAL_AP_SSID "BTC-INFO-SETUP"
+#define CFG_CONFIG_PORTAL_AP_PASSWORD "btcinfo24"
+
+// Optional: Portal nur öffnen, wenn ein Taster beim Booten gehalten wird.
+// -1 deaktiviert den Taster-Trigger.
+#define CFG_CONFIG_PORTAL_TRIGGER_PIN 0
+#define CFG_CONFIG_PORTAL_TRIGGER_ACTIVE_LOW true
+#define CFG_CONFIG_PORTAL_TRIGGER_HOLD_MS 1200UL
 
 // ------------------------
 // WLAN / HTTP / API
@@ -100,8 +107,13 @@
 #define CFG_JSON_DOC_SIZE_HISTORY 8192
 
 #define CFG_URL_COINGECKO "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur,usd&include_market_cap=true"
+#define CFG_URL_COINBASE_PRICE_USD "https://api.coinbase.com/v2/prices/BTC-USD/spot"
+#define CFG_URL_COINBASE_PRICE_EUR "https://api.coinbase.com/v2/prices/BTC-EUR/spot"
 #define CFG_URL_BLOCK_HEIGHT "https://blockchain.info/q/getblockcount"
 #define CFG_URL_COINGECKO_MARKET_CHART_BASE "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency="
+
+#define CFG_HTTP_RETRY_COUNT 2
+#define CFG_HTTP_RETRY_BACKOFF_MS 600UL
 
 #define CFG_CHART_HISTORY_DAYS 7
 #define CFG_CHART_INTERVAL "daily"
@@ -226,6 +238,11 @@
 #error "Ungueltiges CFG_DYNAMIC_CURVE_PRESET. Erlaubt: RUHIG / NORMAL / TRADING"
 #endif
 
+// Display-Lebensdauer / Ghosting:
+// Alle N Display-Updates wird ein Full-Refresh erzwungen,
+// dazwischen werden partielle Updates genutzt.
+#define CFG_DISPLAY_FULL_REFRESH_EVERY_N_UPDATES 8
+
 // -----------------------------------------------------------------------------
 // Hardware-Objekte
 // -----------------------------------------------------------------------------
@@ -300,6 +317,20 @@ const char *getChartVsCurrency(uint8_t chartCurrency);
 // auf dem Display sichtbar war.
 RTC_DATA_ATTR float g_lastDisplayedPriceEur = NAN;
 RTC_DATA_ATTR bool g_hasDisplayedPrice = false;
+RTC_DATA_ATTR uint32_t g_displayUpdateCounter = 0;
+
+struct Diagnostics
+{
+  int lastPriceHttpCode;
+  int lastChartHttpCode;
+  int lastBlockHttpCode;
+  unsigned long lastPlannedSleepMs;
+  bool lastPricesOk;
+  bool lastChartOk;
+  bool lastBlockOk;
+};
+
+Diagnostics g_diag = {-1, -1, -1, 0, false, false, false};
 
 // -----------------------------------------------------------------------------
 // Netzwerk
@@ -348,51 +379,129 @@ bool fetchBtcMarketData(float &btcPriceEur, float &btcPriceUsd, double &btcMarke
 {
   if (WiFi.status() != WL_CONNECTED)
   {
+    g_diag.lastPriceHttpCode = -1;
     return false;
   }
 
-  WiFiClientSecure secureClient;
-  secureClient.setInsecure();
-
-  HTTPClient http;
-  if (!http.begin(secureClient, CFG_URL_COINGECKO))
+  for (int attempt = 0; attempt <= CFG_HTTP_RETRY_COUNT; ++attempt)
   {
-    Serial.println("HTTP begin fehlgeschlagen.");
-    return false;
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure();
+
+    HTTPClient http;
+    if (!http.begin(secureClient, CFG_URL_COINGECKO))
+    {
+      Serial.println("HTTP begin fehlgeschlagen.");
+      continue;
+    }
+
+    http.setTimeout(CFG_HTTP_TIMEOUT_MS);
+
+    const int httpCode = http.GET();
+    g_diag.lastPriceHttpCode = httpCode;
+    if (httpCode == HTTP_CODE_OK)
+    {
+      String payload = http.getString();
+      http.end();
+
+      StaticJsonDocument<CFG_JSON_DOC_SIZE> doc;
+      DeserializationError error = deserializeJson(doc, payload);
+      if (error)
+      {
+        Serial.printf("JSON-Fehler: %s\n", error.c_str());
+      }
+      else
+      {
+        btcPriceEur = doc["bitcoin"]["eur"] | NAN;
+        btcPriceUsd = doc["bitcoin"]["usd"] | NAN;
+        btcMarketCapUsd = doc["bitcoin"]["usd_market_cap"] | NAN;
+
+        if (!isnan(btcPriceEur) && !isnan(btcPriceUsd))
+        {
+          if (isnan(btcMarketCapUsd))
+          {
+            btcMarketCapUsd = NAN;
+          }
+
+          return true;
+        }
+      }
+    }
+    else
+    {
+      Serial.printf("CoinGecko HTTP-Fehler: %d\n", httpCode);
+      http.end();
+    }
+
+    if (attempt < CFG_HTTP_RETRY_COUNT)
+    {
+      delay(CFG_HTTP_RETRY_BACKOFF_MS * static_cast<unsigned long>(attempt + 1));
+    }
   }
 
-  http.setTimeout(CFG_HTTP_TIMEOUT_MS);
+  Serial.println("Fallback: nutze Coinbase Spot Preise.");
 
-  const int httpCode = http.GET();
-  if (httpCode != HTTP_CODE_OK)
+  auto fetchCoinbasePrice = [](const char *url, float &outPrice) -> bool
   {
-    Serial.printf("CoinGecko HTTP-Fehler: %d\n", httpCode);
-    http.end();
+    for (int attempt = 0; attempt <= CFG_HTTP_RETRY_COUNT; ++attempt)
+    {
+      WiFiClientSecure secureClient;
+      secureClient.setInsecure();
+
+      HTTPClient http;
+      if (!http.begin(secureClient, url))
+      {
+        continue;
+      }
+
+      http.setTimeout(CFG_HTTP_TIMEOUT_MS);
+      const int httpCode = http.GET();
+      if (httpCode == HTTP_CODE_OK)
+      {
+        String payload = http.getString();
+        http.end();
+
+        StaticJsonDocument<256> doc;
+        if (deserializeJson(doc, payload) == DeserializationError::Ok)
+        {
+          const char *amount = doc["data"]["amount"] | nullptr;
+          if (amount != nullptr)
+          {
+            outPrice = String(amount).toFloat();
+            if (outPrice > 0.0f)
+            {
+              return true;
+            }
+          }
+        }
+      }
+      else
+      {
+        http.end();
+      }
+
+      if (attempt < CFG_HTTP_RETRY_COUNT)
+      {
+        delay(CFG_HTTP_RETRY_BACKOFF_MS * static_cast<unsigned long>(attempt + 1));
+      }
+    }
+
     return false;
-  }
+  };
 
-  String payload = http.getString();
-  http.end();
+  float fallbackUsd = NAN;
+  float fallbackEur = NAN;
 
-  StaticJsonDocument<CFG_JSON_DOC_SIZE> doc;
-  DeserializationError error = deserializeJson(doc, payload);
-  if (error)
+  if (fetchCoinbasePrice(CFG_URL_COINBASE_PRICE_USD, fallbackUsd) && fetchCoinbasePrice(CFG_URL_COINBASE_PRICE_EUR, fallbackEur))
   {
-    Serial.printf("JSON-Fehler: %s\n", error.c_str());
-    return false;
+    btcPriceUsd = fallbackUsd;
+    btcPriceEur = fallbackEur;
+    btcMarketCapUsd = NAN;
+    g_diag.lastPriceHttpCode = 200;
+    return true;
   }
 
-  btcPriceEur = doc["bitcoin"]["eur"] | NAN;
-  btcPriceUsd = doc["bitcoin"]["usd"] | NAN;
-  btcMarketCapUsd = doc["bitcoin"]["usd_market_cap"] | NAN;
-
-  if (isnan(btcPriceEur) || isnan(btcPriceUsd) || isnan(btcMarketCapUsd))
-  {
-    Serial.println("CoinGecko-Daten unvollständig.");
-    return false;
-  }
-
-  return true;
+  return false;
 }
 
 // Holt den BTC-Kursverlauf der letzten 7 Tage aus CoinGecko.
@@ -403,11 +512,9 @@ bool fetchBtcHistory7d(float outHistory[CFG_CHART_HISTORY_DAYS], uint8_t &outCou
 
   if (WiFi.status() != WL_CONNECTED)
   {
+    g_diag.lastChartHttpCode = -1;
     return false;
   }
-
-  WiFiClientSecure secureClient;
-  secureClient.setInsecure();
 
   const String chartUrl = String(CFG_URL_COINGECKO_MARKET_CHART_BASE) +
                           getChartVsCurrency(g_settings.chartCurrency) +
@@ -416,58 +523,75 @@ bool fetchBtcHistory7d(float outHistory[CFG_CHART_HISTORY_DAYS], uint8_t &outCou
                           "&interval=" +
                           CFG_CHART_INTERVAL;
 
-  HTTPClient http;
-  if (!http.begin(secureClient, chartUrl))
+  for (int attempt = 0; attempt <= CFG_HTTP_RETRY_COUNT; ++attempt)
   {
-    Serial.println("Chart: HTTP begin fehlgeschlagen.");
-    return false;
-  }
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure();
 
-  http.setTimeout(CFG_HTTP_TIMEOUT_MS);
-  const int httpCode = http.GET();
-  if (httpCode != HTTP_CODE_OK)
-  {
-    Serial.printf("Chart HTTP-Fehler: %d\n", httpCode);
-    http.end();
-    return false;
-  }
-
-  String payload = http.getString();
-  http.end();
-
-  DynamicJsonDocument doc(CFG_JSON_DOC_SIZE_HISTORY);
-  DeserializationError error = deserializeJson(doc, payload);
-  if (error)
-  {
-    Serial.printf("Chart JSON-Fehler: %s\n", error.c_str());
-    return false;
-  }
-
-  JsonArray prices = doc["prices"].as<JsonArray>();
-  if (prices.isNull() || prices.size() == 0)
-  {
-    Serial.println("Chart: keine Preisdaten vorhanden.");
-    return false;
-  }
-
-  const size_t totalPoints = prices.size();
-  const size_t pointsToUse = min(static_cast<size_t>(CFG_CHART_HISTORY_DAYS), totalPoints);
-  const size_t startIndex = totalPoints - pointsToUse;
-
-  for (size_t i = 0; i < pointsToUse; ++i)
-  {
-    const float value = prices[startIndex + i][1] | NAN;
-    if (isnan(value) || value <= 0.0f)
+    HTTPClient http;
+    if (!http.begin(secureClient, chartUrl))
     {
-      Serial.println("Chart: ungueltiger Preiswert.");
-      return false;
+      Serial.println("Chart: HTTP begin fehlgeschlagen.");
+      continue;
     }
 
-    outHistory[i] = value;
+    http.setTimeout(CFG_HTTP_TIMEOUT_MS);
+    const int httpCode = http.GET();
+    g_diag.lastChartHttpCode = httpCode;
+    if (httpCode == HTTP_CODE_OK)
+    {
+      String payload = http.getString();
+      http.end();
+
+      DynamicJsonDocument doc(CFG_JSON_DOC_SIZE_HISTORY);
+      DeserializationError error = deserializeJson(doc, payload);
+      if (error)
+      {
+        Serial.printf("Chart JSON-Fehler: %s\n", error.c_str());
+      }
+      else
+      {
+        JsonArray prices = doc["prices"].as<JsonArray>();
+        if (!prices.isNull() && prices.size() > 0)
+        {
+          const size_t totalPoints = prices.size();
+          const size_t pointsToUse = min(static_cast<size_t>(CFG_CHART_HISTORY_DAYS), totalPoints);
+          const size_t startIndex = totalPoints - pointsToUse;
+
+          for (size_t i = 0; i < pointsToUse; ++i)
+          {
+            const float value = prices[startIndex + i][1] | NAN;
+            if (isnan(value) || value <= 0.0f)
+            {
+              Serial.println("Chart: ungueltiger Preiswert.");
+              outCount = 0;
+              break;
+            }
+
+            outHistory[i] = value;
+            outCount = static_cast<uint8_t>(i + 1);
+          }
+
+          if (outCount > 1)
+          {
+            return true;
+          }
+        }
+      }
+    }
+    else
+    {
+      Serial.printf("Chart HTTP-Fehler: %d\n", httpCode);
+      http.end();
+    }
+
+    if (attempt < CFG_HTTP_RETRY_COUNT)
+    {
+      delay(CFG_HTTP_RETRY_BACKOFF_MS * static_cast<unsigned long>(attempt + 1));
+    }
   }
 
-  outCount = static_cast<uint8_t>(pointsToUse);
-  return outCount > 1;
+  return false;
 }
 
 // Holt die aktuelle Bitcoin-Blockhöhe.
@@ -476,41 +600,53 @@ bool fetchBtcBlockHeight(uint32_t &blockHeight)
 {
   if (WiFi.status() != WL_CONNECTED)
   {
+    g_diag.lastBlockHttpCode = -1;
     return false;
   }
 
-  WiFiClientSecure secureClient;
-  secureClient.setInsecure();
-
-  HTTPClient http;
-  if (!http.begin(secureClient, CFG_URL_BLOCK_HEIGHT))
+  for (int attempt = 0; attempt <= CFG_HTTP_RETRY_COUNT; ++attempt)
   {
-    Serial.println("Blockhöhe: HTTP begin fehlgeschlagen.");
-    return false;
+    WiFiClientSecure secureClient;
+    secureClient.setInsecure();
+
+    HTTPClient http;
+    if (!http.begin(secureClient, CFG_URL_BLOCK_HEIGHT))
+    {
+      Serial.println("Blockhöhe: HTTP begin fehlgeschlagen.");
+      continue;
+    }
+
+    http.setTimeout(CFG_HTTP_TIMEOUT_MS);
+    const int httpCode = http.GET();
+    g_diag.lastBlockHttpCode = httpCode;
+    if (httpCode == HTTP_CODE_OK)
+    {
+      String payload = http.getString();
+      http.end();
+
+      payload.trim();
+      const long parsedHeight = payload.toInt();
+      if (parsedHeight > 0)
+      {
+        blockHeight = static_cast<uint32_t>(parsedHeight);
+        return true;
+      }
+
+      Serial.println("Blockhöhe konnte nicht geparst werden.");
+    }
+    else
+    {
+      Serial.printf("Blockhöhe HTTP-Fehler: %d\n", httpCode);
+      http.end();
+    }
+
+    if (attempt < CFG_HTTP_RETRY_COUNT)
+    {
+      delay(CFG_HTTP_RETRY_BACKOFF_MS * static_cast<unsigned long>(attempt + 1));
+    }
   }
 
-  http.setTimeout(CFG_HTTP_TIMEOUT_MS);
-  const int httpCode = http.GET();
-  if (httpCode != HTTP_CODE_OK)
-  {
-    Serial.printf("Blockhöhe HTTP-Fehler: %d\n", httpCode);
-    http.end();
-    return false;
-  }
-
-  String payload = http.getString();
-  http.end();
-
-  payload.trim();
-  const long parsedHeight = payload.toInt();
-  if (parsedHeight <= 0)
-  {
-    Serial.println("Blockhöhe konnte nicht geparst werden.");
-    return false;
-  }
-
-  blockHeight = static_cast<uint32_t>(parsedHeight);
-  return true;
+  return false;
 }
 
 // Synchronisiert die ESP32-Uhr via NTP.
@@ -740,12 +876,185 @@ String selectedIf(bool selected)
   return selected ? " selected" : "";
 }
 
+String escapeHtml(const String &input)
+{
+  String out = input;
+  out.replace("&", "&amp;");
+  out.replace("<", "&lt;");
+  out.replace(">", "&gt;");
+  out.replace("\"", "&quot;");
+  return out;
+}
+
+bool readIntFormField(const String &field, int &outValue)
+{
+  if (!g_configServer.hasArg(field))
+  {
+    return false;
+  }
+
+  const String raw = g_configServer.arg(field);
+  if (raw.length() == 0)
+  {
+    return false;
+  }
+
+  outValue = raw.toInt();
+  return true;
+}
+
+bool readFloatFormField(const String &field, float &outValue)
+{
+  if (!g_configServer.hasArg(field))
+  {
+    return false;
+  }
+
+  const String raw = g_configServer.arg(field);
+  if (raw.length() == 0)
+  {
+    return false;
+  }
+
+  outValue = raw.toFloat();
+  return true;
+}
+
+bool areTimeWindowsPlausible(const AppSettings &settings)
+{
+  return settings.dayStartHour < settings.eveningStartHour && settings.eveningStartHour < settings.nightStartHour;
+}
+
+String buildErrorPage(const String &message)
+{
+  String html;
+  html.reserve(1000);
+  html += "<html><body><h3>Konfiguration ungueltig</h3><p>";
+  html += escapeHtml(message);
+  html += "</p><p><a href='/'>Zurueck</a></p></body></html>";
+  return html;
+}
+
+String getUptimeString()
+{
+  const unsigned long totalSeconds = millis() / 1000UL;
+  const unsigned long hours = totalSeconds / 3600UL;
+  const unsigned long minutes = (totalSeconds % 3600UL) / 60UL;
+  const unsigned long seconds = totalSeconds % 60UL;
+
+  char buffer[32];
+  snprintf(buffer, sizeof(buffer), "%luh %lum %lus", hours, minutes, seconds);
+  return String(buffer);
+}
+
+String buildStatusPageHtml()
+{
+  String html;
+  html.reserve(2200);
+  html += "<html><body><h3>BTC Info Status</h3><table border='1' cellpadding='6' cellspacing='0'>";
+  html += "<tr><td>Uptime</td><td>" + getUptimeString() + "</td></tr>";
+  html += "<tr><td>WLAN RSSI</td><td>" + String(WiFi.RSSI()) + " dBm</td></tr>";
+  html += "<tr><td>Letzter Price HTTP Code</td><td>" + String(g_diag.lastPriceHttpCode) + "</td></tr>";
+  html += "<tr><td>Letzter Chart HTTP Code</td><td>" + String(g_diag.lastChartHttpCode) + "</td></tr>";
+  html += "<tr><td>Letzter Block HTTP Code</td><td>" + String(g_diag.lastBlockHttpCode) + "</td></tr>";
+  html += "<tr><td>Preisabruf OK</td><td>" + String(g_diag.lastPricesOk ? "ja" : "nein") + "</td></tr>";
+  html += "<tr><td>Chartabruf OK</td><td>" + String(g_diag.lastChartOk ? "ja" : "nein") + "</td></tr>";
+  html += "<tr><td>Blockabruf OK</td><td>" + String(g_diag.lastBlockOk ? "ja" : "nein") + "</td></tr>";
+  html += "<tr><td>Geplantes Sleep-Intervall</td><td>" + String(g_diag.lastPlannedSleepMs / 60000UL) + " min</td></tr>";
+  html += "</table><p><a href='/'>Zurueck</a></p></body></html>";
+  return html;
+}
+
+String settingsToJson(const AppSettings &settings)
+{
+  DynamicJsonDocument doc(1024);
+  doc["wifi_ssid"] = settings.wifiSsid;
+  doc["wifi_pwd"] = settings.wifiPassword;
+  doc["profile"] = settings.profile;
+  doc["dyn_preset"] = settings.dynamicPreset;
+  doc["chart_cur"] = settings.chartCurrency;
+  doc["h_day"] = settings.dayStartHour;
+  doc["h_even"] = settings.eveningStartHour;
+  doc["h_night"] = settings.nightStartHour;
+  doc["i_day_m"] = settings.fetchIntervalDayMs / 60000UL;
+  doc["i_even_m"] = settings.fetchIntervalEveningMs / 60000UL;
+  doc["i_night_m"] = settings.fetchIntervalNightMs / 60000UL;
+  doc["disp_thr"] = settings.displayUpdateThresholdPercent;
+
+  String out;
+  serializeJsonPretty(doc, out);
+  return out;
+}
+
+bool applySettingsFromJsonString(const String &jsonText, String &errorMessage)
+{
+  DynamicJsonDocument doc(2048);
+  DeserializationError err = deserializeJson(doc, jsonText);
+  if (err)
+  {
+    errorMessage = "JSON konnte nicht gelesen werden.";
+    return false;
+  }
+
+  AppSettings updated = g_settings;
+
+  updated.wifiSsid = doc["wifi_ssid"] | updated.wifiSsid;
+  updated.wifiPassword = doc["wifi_pwd"] | updated.wifiPassword;
+
+  applyProfileTemplateToSettings(doc["profile"] | updated.profile, updated);
+  applyDynamicPresetToSettings(doc["dyn_preset"] | updated.dynamicPreset, updated);
+
+  updated.chartCurrency = doc["chart_cur"] | updated.chartCurrency;
+  updated.dayStartHour = doc["h_day"] | updated.dayStartHour;
+  updated.eveningStartHour = doc["h_even"] | updated.eveningStartHour;
+  updated.nightStartHour = doc["h_night"] | updated.nightStartHour;
+  updated.fetchIntervalDayMs = minutesToMs(doc["i_day_m"] | static_cast<int>(updated.fetchIntervalDayMs / 60000UL));
+  updated.fetchIntervalEveningMs = minutesToMs(doc["i_even_m"] | static_cast<int>(updated.fetchIntervalEveningMs / 60000UL));
+  updated.fetchIntervalNightMs = minutesToMs(doc["i_night_m"] | static_cast<int>(updated.fetchIntervalNightMs / 60000UL));
+  updated.displayUpdateThresholdPercent = doc["disp_thr"] | updated.displayUpdateThresholdPercent;
+
+  sanitizeSettings(updated);
+  if (!areTimeWindowsPlausible(updated))
+  {
+    errorMessage = "Zeitfenster ungueltig: Tag < Abend < Nacht muss gelten.";
+    return false;
+  }
+
+  g_settings = updated;
+  saveSettingsToPreferences(g_settings);
+  return true;
+}
+
+bool isConfigPortalTriggerPressed()
+{
+  if (CFG_CONFIG_PORTAL_TRIGGER_PIN < 0)
+  {
+    return true;
+  }
+
+  pinMode(CFG_CONFIG_PORTAL_TRIGGER_PIN, INPUT_PULLUP);
+
+  const unsigned long startMs = millis();
+  while ((millis() - startMs) < CFG_CONFIG_PORTAL_TRIGGER_HOLD_MS)
+  {
+    const int level = digitalRead(CFG_CONFIG_PORTAL_TRIGGER_PIN);
+    const bool pressed = CFG_CONFIG_PORTAL_TRIGGER_ACTIVE_LOW ? (level == LOW) : (level == HIGH);
+    if (!pressed)
+    {
+      return false;
+    }
+    delay(10);
+  }
+
+  return true;
+}
+
 String buildConfigPageHtml()
 {
   // HTML bewusst kompakt als String aufgebaut,
   // damit keine zusätzlichen Dateien/Filesystem nötig sind.
   String html;
-  html.reserve(5000);
+  html.reserve(7600);
   html += "<!doctype html><html><head><meta charset='utf-8'>";
   html += "<meta name='viewport' content='width=device-width,initial-scale=1'>";
   html += "<title>BTC Info Setup</title>";
@@ -753,6 +1062,7 @@ String buildConfigPageHtml()
   html += "label{display:block;margin-top:12px;font-weight:600;}input,select{width:100%;padding:8px;margin-top:4px;}";
   html += "button{margin-top:16px;padding:10px 14px;font-weight:700;}button.danger{background:#fff;border:2px solid #111;}small{color:#555;}</style></head><body>";
   html += "<h2>BTC Info Konfiguration</h2><p>Werte werden dauerhaft gespeichert und beim nächsten Reset als Default geladen.</p>";
+  html += "<p><a href='/status'>Statusseite</a> | <a href='/backup'>JSON-Backup herunterladen</a></p>";
   html += "<form method='POST' action='/save'>";
 
   html += "<label>WLAN SSID</label><input name='wifi_ssid' value='" + g_settings.wifiSsid + "'>";
@@ -788,6 +1098,13 @@ String buildConfigPageHtml()
 
   html += "<button type='submit'>Speichern & Neustarten</button>";
   html += "</form>";
+
+  html += "<h3>JSON Restore</h3>";
+  html += "<form method='POST' action='/restore'>";
+  html += "<label>Konfiguration als JSON</label><textarea name='config_json' rows='10' style='width:100%;font-family:monospace;'></textarea>";
+  html += "<button type='submit'>JSON importieren & Neustarten</button>";
+  html += "</form>";
+
   html += "<form method='POST' action='/factory-reset' onsubmit='return confirm(\"Alle gespeicherten Einstellungen wirklich loeschen?\");'>";
   html += "<button type='submit' class='danger'>Werkseinstellungen wiederherstellen</button>";
   html += "</form>";
@@ -815,16 +1132,40 @@ void handleConfigSave()
   updated.eveningStartHour = g_configServer.arg("h_even").toInt();
   updated.nightStartHour = g_configServer.arg("h_night").toInt();
 
-  const uint16_t dayMinutes = static_cast<uint16_t>(g_configServer.arg("i_day_m").toInt());
-  const uint16_t eveningMinutes = static_cast<uint16_t>(g_configServer.arg("i_even_m").toInt());
-  const uint16_t nightMinutes = static_cast<uint16_t>(g_configServer.arg("i_night_m").toInt());
+  int dayMinutes = 0;
+  int eveningMinutes = 0;
+  int nightMinutes = 0;
+  if (!readIntFormField("i_day_m", dayMinutes) || !readIntFormField("i_even_m", eveningMinutes) || !readIntFormField("i_night_m", nightMinutes))
+  {
+    g_configServer.send(400, "text/html", buildErrorPage("Intervall-Felder fehlen oder sind leer."));
+    return;
+  }
 
-  updated.fetchIntervalDayMs = minutesToMs(dayMinutes);
-  updated.fetchIntervalEveningMs = minutesToMs(eveningMinutes);
-  updated.fetchIntervalNightMs = minutesToMs(nightMinutes);
-  updated.displayUpdateThresholdPercent = g_configServer.arg("disp_thr").toFloat();
+  updated.fetchIntervalDayMs = minutesToMs(static_cast<uint16_t>(dayMinutes));
+  updated.fetchIntervalEveningMs = minutesToMs(static_cast<uint16_t>(eveningMinutes));
+  updated.fetchIntervalNightMs = minutesToMs(static_cast<uint16_t>(nightMinutes));
+
+  float threshold = 0.0f;
+  if (!readFloatFormField("disp_thr", threshold))
+  {
+    g_configServer.send(400, "text/html", buildErrorPage("Display-Schwelle fehlt oder ist ungueltig."));
+    return;
+  }
+  updated.displayUpdateThresholdPercent = threshold;
 
   sanitizeSettings(updated);
+  if (!areTimeWindowsPlausible(updated))
+  {
+    g_configServer.send(400, "text/html", buildErrorPage("Zeitfenster ungueltig: Tag < Abend < Nacht muss gelten."));
+    return;
+  }
+
+  if (updated.wifiSsid.length() == 0)
+  {
+    g_configServer.send(400, "text/html", buildErrorPage("WLAN SSID darf nicht leer sein."));
+    return;
+  }
+
   g_settings = updated;
   saveSettingsToPreferences(g_settings);
 
@@ -832,6 +1173,33 @@ void handleConfigSave()
   g_configServer.send(200,
                       "text/html",
                       "<html><body><h3>Gespeichert.</h3><p>Der ESP32 startet neu.</p></body></html>");
+}
+
+void handleConfigBackup()
+{
+  g_configServer.send(200, "application/json", settingsToJson(g_settings));
+}
+
+void handleConfigRestore()
+{
+  if (!g_configServer.hasArg("config_json") || g_configServer.arg("config_json").length() == 0)
+  {
+    g_configServer.send(400, "text/html", buildErrorPage("JSON-Text fehlt."));
+    return;
+  }
+
+  String errorMessage;
+  if (!applySettingsFromJsonString(g_configServer.arg("config_json"), errorMessage))
+  {
+    g_configServer.send(400, "text/html", buildErrorPage(errorMessage));
+    return;
+  }
+
+  g_configSaved = true;
+  g_factoryResetRequested = false;
+  g_configServer.send(200,
+                      "text/html",
+                      "<html><body><h3>JSON importiert.</h3><p>Der ESP32 startet neu.</p></body></html>");
 }
 
 void handleFactoryReset()
@@ -864,7 +1232,12 @@ bool shouldStartConfigPortalOnThisBoot()
     return false;
   }
 
-  return esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_TIMER;
+  if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER)
+  {
+    return false;
+  }
+
+  return isConfigPortalTriggerPressed();
 }
 
 void runConfigPortalIfNeeded()
@@ -879,7 +1252,14 @@ void runConfigPortalIfNeeded()
   Serial.println("Starte Konfigurations-Portal (Reset erkannt)...");
 
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(CFG_CONFIG_PORTAL_AP_SSID);
+  if (String(CFG_CONFIG_PORTAL_AP_PASSWORD).length() >= 8)
+  {
+    WiFi.softAP(CFG_CONFIG_PORTAL_AP_SSID, CFG_CONFIG_PORTAL_AP_PASSWORD);
+  }
+  else
+  {
+    WiFi.softAP(CFG_CONFIG_PORTAL_AP_SSID);
+  }
 
   Serial.print("Portal-IP: ");
   Serial.println(WiFi.softAPIP());
@@ -888,6 +1268,10 @@ void runConfigPortalIfNeeded()
   g_factoryResetRequested = false;
   g_configServer.on("/", HTTP_GET, []()
                     { g_configServer.send(200, "text/html", buildConfigPageHtml()); });
+  g_configServer.on("/status", HTTP_GET, []()
+                    { g_configServer.send(200, "text/html", buildStatusPageHtml()); });
+  g_configServer.on("/backup", HTTP_GET, handleConfigBackup);
+  g_configServer.on("/restore", HTTP_POST, handleConfigRestore);
   g_configServer.on("/save", HTTP_POST, handleConfigSave);
   g_configServer.on("/factory-reset", HTTP_POST, handleFactoryReset);
   g_configServer.begin();
@@ -1246,15 +1630,43 @@ void drawDynamicValues(const BtcSnapshot &snapshot)
 
 // Führt die eigentliche e-Paper-Ausgabe aus.
 // Wegen der Display-Technik erfolgt das Zeichnen seitenweise (firstPage/nextPage).
-void drawBtcScreen(const BtcSnapshot &snapshot)
+void drawBtcScreen(const BtcSnapshot &snapshot, bool forceFullRefresh)
 {
   display.setRotation(0);
-  display.setFullWindow();
+  if (forceFullRefresh)
+  {
+    display.setFullWindow();
+  }
+  else
+  {
+    display.setPartialWindow(0, 27, display.width(), display.height() - 27);
+  }
+
   display.firstPage();
   do
   {
-    drawStaticLayout();
-    drawDynamicValues(snapshot);
+    if (forceFullRefresh)
+    {
+      drawStaticLayout();
+      drawDynamicValues(snapshot);
+    }
+    else
+    {
+      display.fillRect(0, 27, display.width(), display.height() - 27, GxEPD_WHITE);
+      display.setFont(&FreeMono9pt7b);
+      display.setTextColor(GxEPD_BLACK);
+      display.setCursor(8, 48);
+      display.println("EUR:");
+      display.setCursor(8, 72);
+      display.println("USD:");
+      display.setCursor(8, 96);
+      display.println("MCap:");
+      display.setCursor(8, 120);
+      display.println("Block:");
+      display.setCursor(8, 144);
+      display.println("Moskau:");
+      drawDynamicValues(snapshot);
+    }
   } while (display.nextPage());
 }
 
@@ -1320,6 +1732,9 @@ void setup()
   Serial.printf("Aktives Profil: %s\n", getProfileName(g_settings.profile));
   Serial.printf("Dynamik-Preset: %s\n", getDynamicPresetName(g_settings.dynamicPreset));
   Serial.printf("Chart-Waehrung: %s\n", getChartCurrencyLabel(g_settings.chartCurrency));
+  Serial.printf("Konfig-Portal AP: %s (Passwort gesetzt: %s)\n",
+                CFG_CONFIG_PORTAL_AP_SSID,
+                (String(CFG_CONFIG_PORTAL_AP_PASSWORD).length() >= 8) ? "ja" : "nein");
 
   // Display initialisieren.
   // Nachlesen GxEPD2: https://github.com/ZinggJM/GxEPD2
@@ -1367,6 +1782,11 @@ void setup()
     snapshot.pricesOk = fetchBtcMarketData(snapshot.btcPriceEuro, snapshot.btcPriceUsd, snapshot.btcMarketCapUsd);
     snapshot.blockHeightOk = fetchBtcBlockHeight(snapshot.btcBlockHeight);
     snapshot.chartHistoryOk = fetchBtcHistory7d(snapshot.chartHistory7d, snapshot.chartPointsCount);
+
+    g_diag.lastPricesOk = snapshot.pricesOk;
+    g_diag.lastBlockOk = snapshot.blockHeightOk;
+    g_diag.lastChartOk = snapshot.chartHistoryOk;
+
     if (snapshot.pricesOk)
     {
       snapshot.moscowTime = calculateMoscowTime(snapshot.btcPriceUsd);
@@ -1392,7 +1812,9 @@ void setup()
                     g_settings.displayUpdateThresholdPercent);
     }
 
-    drawBtcScreen(snapshot);
+    const bool forceFullRefresh = (g_displayUpdateCounter % CFG_DISPLAY_FULL_REFRESH_EVERY_N_UPDATES) == 0;
+    drawBtcScreen(snapshot, forceFullRefresh);
+    g_displayUpdateCounter++;
 
     if (snapshot.pricesOk)
     {
@@ -1413,6 +1835,7 @@ void setup()
                                                                                 hasReferencePrice,
                                                                                 snapshot.pricesOk,
                                                                                 sleepHour);
+  g_diag.lastPlannedSleepMs = dynamicSleepIntervalMs;
 
   if (dynamicSleepIntervalMs != nextFetchIntervalMs)
   {

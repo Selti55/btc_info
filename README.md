@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.24**
+Aktuelle Version: **v0.3.25**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -65,6 +65,8 @@ Aktuelle Version: **v0.3.24**
 - Ein-Schalter-Dynamik-Preset (`ruhig` / `normal` / `trading`)
 - 7-Tage-Kursgrafik auf dem Display (umschaltbar EUR/USD)
 - Web-Konfigurationsseite bei Reset (gespeicherte Werte als Default im Formular)
+- Statusseite im Konfig-Portal (HTTP-Codes, RSSI, Uptime, Sleep-Intervall)
+- JSON-Backup/Restore der Einstellungen über das Konfig-Portal
 - Display-Update nur bei Kursänderung >= 0,5 %
 - Zentrale Konfiguration am Anfang von `main.cpp` (alle Hauptparameter als `#define`)
 - Ausführlich kommentierter `main.cpp` für einfachere Wartung
@@ -139,11 +141,19 @@ In `src/main.cpp` stehen dafür:
 Bei einem normalen Reset (nicht Deep-Sleep-Wakeup) startet der ESP32 ein Setup-AP und eine Konfigurationsseite:
 
 - AP-SSID: `BTC-INFO-SETUP`
+- AP-Passwort: `CFG_CONFIG_PORTAL_AP_PASSWORD`
 - URL: `http://192.168.4.1`
 - Timeout: `CFG_CONFIG_PORTAL_TIMEOUT_MS`
+- Optionaler Taster-Trigger: `CFG_CONFIG_PORTAL_TRIGGER_PIN` + `CFG_CONFIG_PORTAL_TRIGGER_HOLD_MS`
 
 Über die Seite können u. a. WLAN, Profil, Dynamik-Preset, Chart-Währung, Zeitfenster, Intervalle und Display-Schwelle gesetzt werden.
 Alle Werte werden persistent gespeichert und beim nächsten Reset als vorausgefüllte Defaults angezeigt.
+
+Zusätzlich verfügbar:
+
+- Statusseite (`/status`) mit Uptime, RSSI und letzten HTTP-Codes
+- JSON-Backup (`/backup`) und JSON-Restore (`/restore`)
+- Werksreset-Button mit Sicherheitsabfrage
 
 ## Konfiguration
 
