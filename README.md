@@ -2,11 +2,19 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.10**
+Aktuelle Version: **v0.3.11**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
 > Das ist in der Praxis meist der beste Kompromiss aus Aktualität am Tag und Stromsparen in der Nacht.
+
+## Quickstart in 60 Sekunden
+
+1. WLAN in `include/secrets.h` eintragen (`WIFI_SSID`, `WIFI_PASSWORD`).
+2. Optional Profil wählen in `src/main.cpp` über `#define CFG_PROFILE ...`.
+3. Firmware bauen: `pio run`.
+4. Auf das Board flashen: `pio run -t upload`.
+5. Live-Logs prüfen: `pio device monitor` (zeigt u. a. aktives Profil und Display-Updates).
 
 ## Enthalten
 

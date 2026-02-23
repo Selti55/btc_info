@@ -16,6 +16,14 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.11] - 2026-02-23
+
+### Added
+- README um Abschnitt „Quickstart in 60 Sekunden" ergänzt.
+
+### Changed
+- README auf Version `v0.3.11` aktualisiert.
+
 ## [0.3.10] - 2026-02-23
 
 ### Added
@@ -153,7 +161,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.10...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.11...HEAD
+[0.3.11]: https://github.com/Selti55/btc_info/releases/tag/v0.3.11
 [0.3.10]: https://github.com/Selti55/btc_info/releases/tag/v0.3.10
 [0.3.9]: https://github.com/Selti55/btc_info/releases/tag/v0.3.9
 [0.3.8]: https://github.com/Selti55/btc_info/releases/tag/v0.3.8
