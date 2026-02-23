@@ -16,6 +16,19 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.19] - 2026-02-23
+
+### Added
+- Dynamische Deep-Sleep-Anpassung nach prozentualer Kursänderung ergänzt (mehr Änderung = kürzerer Sleep, weniger Änderung = längerer Sleep).
+- Nichtlineare Kurvenlogik für die Sleep-Anpassung ergänzt (`powf`-basierte Reaktion über/unter Schwelle).
+- Zeitfensterabhängige Dynamikgrenzen (Tag/Abend/Nacht) ergänzt.
+- Dynamik-Presets ergänzt: `RUHIG`, `NORMAL`, `TRADING` mit zentralem Schalter `CFG_DYNAMIC_CURVE_PRESET`.
+
+### Changed
+- Aktives Dynamik-Preset in `src/main.cpp` auf `NORMAL` gesetzt.
+- Nachtgrenzen für dynamischen Sleep konservativer abgestimmt (`MIN_FACTOR_NIGHT=0.85`, `MAX_FACTOR_NIGHT=3.20`).
+- README auf Version `v0.3.19` aktualisiert und um Dynamik-Dokumentation erweitert.
+
 ## [0.3.18] - 2026-02-23
 
 ### Changed
@@ -215,7 +228,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.18...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.19...HEAD
+[0.3.19]: https://github.com/Selti55/btc_info/releases/tag/v0.3.19
 [0.3.18]: https://github.com/Selti55/btc_info/releases/tag/v0.3.18
 [0.3.17]: https://github.com/Selti55/btc_info/releases/tag/v0.3.17
 [0.3.16]: https://github.com/Selti55/btc_info/releases/tag/v0.3.16

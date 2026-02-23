@@ -118,6 +118,50 @@
 #define CFG_FETCH_INTERVAL_FALLBACK_MS CFG_FETCH_INTERVAL_EVENING_MS
 #define CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT CFG_PROFILE_DISPLAY_UPDATE_THRESHOLD_PERCENT
 
+// Dynamik für Deep Sleep (bezogen auf das zeitfensterbasierte Basis-Intervall):
+// - Große Kursänderung  => kürzerer Sleep
+// - Kleine Kursänderung => längerer Sleep
+// Der Faktor wird auf diesen Bereich begrenzt, um Extremwerte zu vermeiden.
+// Tuning nach Zeitfenster:
+// - Tag: reaktiver
+// - Abend: ausgewogen
+// - Nacht: konservativer (mehr Ruhe)
+#define CFG_DYNAMIC_SLEEP_MIN_FACTOR_DAY 0.30f
+#define CFG_DYNAMIC_SLEEP_MAX_FACTOR_DAY 1.80f
+#define CFG_DYNAMIC_SLEEP_MIN_FACTOR_EVENING 0.40f
+#define CFG_DYNAMIC_SLEEP_MAX_FACTOR_EVENING 2.20f
+#define CFG_DYNAMIC_SLEEP_MIN_FACTOR_NIGHT 0.85f
+#define CFG_DYNAMIC_SLEEP_MAX_FACTOR_NIGHT 3.20f
+
+// Nichtlineare Kurve:
+// - Bei ratio > 1.0 (mehr Bewegung als Schwelle): stärkeres Komprimieren (reaktiver)
+// - Bei ratio < 1.0 (weniger Bewegung als Schwelle): sanfteres Strecken (stabiler)
+// Auswahl über EINEN Schalter:
+// - RUHIG: weniger Reaktion (längere Laufzeit)
+// - NORMAL: guter Standard
+// - TRADING: schnellere Reaktion bei Volatilität
+#define CFG_DYNAMIC_CURVE_PRESET_RUHIG 1
+#define CFG_DYNAMIC_CURVE_PRESET_NORMAL 2
+#define CFG_DYNAMIC_CURVE_PRESET_TRADING 3
+
+#define CFG_DYNAMIC_CURVE_PRESET CFG_DYNAMIC_CURVE_PRESET_NORMAL
+
+#if CFG_DYNAMIC_CURVE_PRESET == CFG_DYNAMIC_CURVE_PRESET_RUHIG
+#define CFG_DYNAMIC_CURVE_PRESET_NAME "ruhig"
+#define CFG_DYNAMIC_SLEEP_CURVE_EXP_HIGH 1.15f
+#define CFG_DYNAMIC_SLEEP_CURVE_EXP_LOW 1.05f
+#elif CFG_DYNAMIC_CURVE_PRESET == CFG_DYNAMIC_CURVE_PRESET_NORMAL
+#define CFG_DYNAMIC_CURVE_PRESET_NAME "normal"
+#define CFG_DYNAMIC_SLEEP_CURVE_EXP_HIGH 1.35f
+#define CFG_DYNAMIC_SLEEP_CURVE_EXP_LOW 1.20f
+#elif CFG_DYNAMIC_CURVE_PRESET == CFG_DYNAMIC_CURVE_PRESET_TRADING
+#define CFG_DYNAMIC_CURVE_PRESET_NAME "trading"
+#define CFG_DYNAMIC_SLEEP_CURVE_EXP_HIGH 1.70f
+#define CFG_DYNAMIC_SLEEP_CURVE_EXP_LOW 1.30f
+#else
+#error "Ungueltiges CFG_DYNAMIC_CURVE_PRESET. Erlaubt: RUHIG / NORMAL / TRADING"
+#endif
+
 // -----------------------------------------------------------------------------
 // Hardware-Objekte
 // -----------------------------------------------------------------------------
@@ -366,6 +410,57 @@ float calculatePercentChange(float oldValue, float newValue)
   return fabsf((newValue - oldValue) / oldValue) * 100.0f;
 }
 
+// Dynamische Anpassung des Deep-Sleep-Intervalls.
+// Bezugspunkt ist das Basisintervall aus Tag/Abend/Nacht.
+//
+// Verhalten (nichtlinear):
+// - pct ~= threshold  -> Faktor ~ 1.0 (Basisintervall)
+// - pct  > threshold  -> Faktor < 1.0, mit stärkerer Reaktion bei großen Ausschlägen
+// - pct  < threshold  -> Faktor > 1.0, mit sanfterer Verlängerung bei kleinen Änderungen
+//
+// Für den allerersten Messzyklus ohne Referenzkurs bleibt das Basisintervall aktiv.
+unsigned long calculateDynamicSleepIntervalMs(unsigned long baseIntervalMs,
+                                              float percentChange,
+                                              bool hasReferencePrice,
+                                              bool pricesOk,
+                                              int localHour)
+{
+  if (!pricesOk || !hasReferencePrice || isnan(percentChange) || isinf(percentChange) ||
+      CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT <= 0.0f)
+  {
+    return baseIntervalMs;
+  }
+
+  float minFactor = CFG_DYNAMIC_SLEEP_MIN_FACTOR_EVENING;
+  float maxFactor = CFG_DYNAMIC_SLEEP_MAX_FACTOR_EVENING;
+
+  if (localHour >= CFG_DAY_START_HOUR && localHour < CFG_EVENING_START_HOUR)
+  {
+    minFactor = CFG_DYNAMIC_SLEEP_MIN_FACTOR_DAY;
+    maxFactor = CFG_DYNAMIC_SLEEP_MAX_FACTOR_DAY;
+  }
+  else if (localHour >= CFG_NIGHT_START_HOUR || localHour < CFG_DAY_START_HOUR)
+  {
+    minFactor = CFG_DYNAMIC_SLEEP_MIN_FACTOR_NIGHT;
+    maxFactor = CFG_DYNAMIC_SLEEP_MAX_FACTOR_NIGHT;
+  }
+
+  const float ratio = percentChange / CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT;
+  float factor = 1.0f;
+
+  if (ratio >= 1.0f)
+  {
+    factor = 1.0f / powf(ratio, CFG_DYNAMIC_SLEEP_CURVE_EXP_HIGH);
+  }
+  else
+  {
+    factor = 1.0f + powf(1.0f - ratio, CFG_DYNAMIC_SLEEP_CURVE_EXP_LOW);
+  }
+
+  factor = constrain(factor, minFactor, maxFactor);
+  return static_cast<unsigned long>(baseIntervalMs * factor);
+}
+
 // Entscheidet, ob das Display aktualisiert werden soll.
 // Regeln:
 // 1) Beim ersten gültigen Kurs immer aktualisieren.
@@ -561,7 +656,8 @@ void printSnapshot(const BtcSnapshot &snapshot)
 // 2) WLAN verbinden
 // 3) Uhrzeit (NTP) synchronisieren -> Intervall bestimmen
 // 4) Daten abrufen + berechnen
-// 5) Nur bei >= 0,5% Kursänderung Display aktualisieren
+// 5) Nur bei >= Schwellenwert Kursänderung Display aktualisieren
+// 6) Deep-Sleep-Intervall dynamisch an Kursänderung anpassen
 // 6) WLAN abschalten
 // 7) Für das zeitabhängige Intervall in Deep Sleep gehen
 void setup()
@@ -570,6 +666,7 @@ void setup()
   delay(CFG_BOOT_DELAY_MS);
 
   Serial.printf("Aktives Profil: %s\n", CFG_PROFILE_NAME);
+  Serial.printf("Dynamik-Preset: %s\n", CFG_DYNAMIC_CURVE_PRESET_NAME);
 
   // Display initialisieren.
   // Nachlesen GxEPD2: https://github.com/ZinggJM/GxEPD2
@@ -623,6 +720,7 @@ void setup()
 
   float percentChange = 0.0f;
   const bool updateDisplay = shouldUpdateDisplay(snapshot, percentChange);
+  const int sleepHour = localTimeValid ? localTime.tm_hour : CFG_EVENING_START_HOUR;
 
   if (updateDisplay)
   {
@@ -652,14 +750,33 @@ void setup()
                   CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT);
   }
 
+  const bool hasReferencePrice = g_hasDisplayedPrice && !isnan(g_lastDisplayedPriceEur);
+  const unsigned long dynamicSleepIntervalMs = calculateDynamicSleepIntervalMs(nextFetchIntervalMs,
+                                                                                percentChange,
+                                                                                hasReferencePrice,
+                                                                                snapshot.pricesOk,
+                                                                                sleepHour);
+
+  if (dynamicSleepIntervalMs != nextFetchIntervalMs)
+  {
+    Serial.printf("Dynamischer Sleep aktiv: Basis %lu min -> Neu %lu min (Delta %.3f%%).\n",
+                  static_cast<unsigned long>(nextFetchIntervalMs / 60000UL),
+                  static_cast<unsigned long>(dynamicSleepIntervalMs / 60000UL),
+                  percentChange);
+  }
+  else
+  {
+    Serial.println("Dynamischer Sleep: Basisintervall unveraendert.");
+  }
+
   WiFi.disconnect(true, true);
   WiFi.mode(WIFI_OFF);
 
   // Deep Sleep: Mikrosekunden erwartet, deshalb *1000 von ms -> us.
   Serial.printf("Gehe in Deep Sleep fuer %lu Minuten...\n",
-                static_cast<unsigned long>(nextFetchIntervalMs / 60000UL));
+                static_cast<unsigned long>(dynamicSleepIntervalMs / 60000UL));
   Serial.flush();
-  esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(nextFetchIntervalMs) * 1000ULL);
+  esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(dynamicSleepIntervalMs) * 1000ULL);
   esp_deep_sleep_start();
 }
 

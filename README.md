@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.18**
+Aktuelle Version: **v0.3.19**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -61,6 +61,8 @@ Aktuelle Version: **v0.3.18**
 - e-Paper-Ausgabe mit statischem und dynamischem Bereich
 - Hervorgehobener BTC-EUR-Wert (größer, rechtsbündig)
 - Zeitabhängiger Deep-Sleep-Zyklus (Tag/Abend/Nacht)
+- Dynamischer Deep-Sleep-Faktor nach Kursänderung (nichtlineare Kurve)
+- Ein-Schalter-Dynamik-Preset (`ruhig` / `normal` / `trading`)
 - Display-Update nur bei Kursänderung >= 0,5 %
 - Zentrale Konfiguration am Anfang von `main.cpp` (alle Hauptparameter als `#define`)
 - Ausführlich kommentierter `main.cpp` für einfachere Wartung
@@ -107,6 +109,16 @@ Das e-Paper wird nur dann neu gezeichnet, wenn die EUR-Kursänderung seit der le
 - Blockhöhe wird weiterhin abgefragt und im Snapshot geführt.
 - Die Blockhöhe ist **kein** Trigger mehr für ein Display-Update.
 
+### Dynamischer Deep Sleep (neu)
+
+Das Basis-Intervall aus dem Zeitfenster (Tag/Abend/Nacht) wird zusätzlich dynamisch skaliert:
+
+- **hohe prozentuale Kursänderung** → **kürzerer** Deep Sleep
+- **niedrige prozentuale Kursänderung** → **längerer** Deep Sleep
+
+Die Dynamik arbeitet mit einer **nichtlinearen Kurve** und separaten Grenzen für Tag/Abend/Nacht.
+So bleibt das System tagsüber reaktiv und nachts deutlich ruhiger.
+
 ## Konfiguration
 
 Alle wichtigen Stellschrauben stehen gesammelt am **Anfang** von `src/main.cpp` als `#define`:
@@ -117,6 +129,7 @@ Alle wichtigen Stellschrauben stehen gesammelt am **Anfang** von `src/main.cpp` 
 - Display-Schwelle (`CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT`)
 - NTP-/Zeitzonen-Einstellungen (`CFG_TZ_INFO`, `CFG_NTP_SERVER_*`)
 - Profil-Auswahl (`CFG_PROFILE`)
+- Dynamik-Preset-Auswahl (`CFG_DYNAMIC_CURVE_PRESET`)
 
 Damit kann man das Verhalten ändern, ohne tiefer in die Logik eingreifen zu müssen.
 
@@ -170,6 +183,17 @@ Diese Presets sind fertige Startpunkte. Werte direkt in den passenden `CFG_*`-De
 | Nachtmodus | `10UL * 60UL * 1000UL` | `30UL * 60UL * 1000UL` | `180UL * 60UL * 1000UL` | `0.6f` | Tagsüber normal, nachts besonders stromsparend |
 
 Praxis-Tipp: Erst mit Ausgewogen starten. Danach nur eine Stellschraube gleichzeitig ändern und 24-48 Stunden beobachten.
+
+### Dynamik-Presets (`CFG_DYNAMIC_CURVE_PRESET`)
+
+Zusätzlich zu `CFG_PROFILE` gibt es für die nichtlineare Sleep-Kurve einen Ein-Schalter:
+
+- `CFG_DYNAMIC_CURVE_PRESET_RUHIG`
+- `CFG_DYNAMIC_CURVE_PRESET_NORMAL`
+- `CFG_DYNAMIC_CURVE_PRESET_TRADING`
+
+Empfehlung für den Alltag: `CFG_DYNAMIC_CURVE_PRESET_NORMAL`.
+`TRADING` reagiert aggressiver bei Volatilität, `RUHIG` ist akkusparender.
 
 ### Vor- und Nachteile der Modi
 
