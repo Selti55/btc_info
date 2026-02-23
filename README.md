@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.13**
+Aktuelle Version: **v0.3.14**
 
 > **TL;DR**
 > Wenn du nicht lange einstellen willst: nutze den Default `CFG_PROFILE_NACHTMODUS`.
@@ -28,6 +28,7 @@ Aktuelle Version: **v0.3.13**
 - `NTP-Zeit nicht verfuegbar, nutze Fallback-Intervall.` → Keine gültige Uhrzeit vom NTP-Server; Gerät nutzt `CFG_FETCH_INTERVAL_FALLBACK_MS`.
 - `Kein Display-Update: Kursaenderung = 0.213% (< 0.600%).` → Alles ok; Schwelle wurde bewusst nicht erreicht, daher kein Refresh.
 - `Display-Update: Kursaenderung = 0.942% (Schwelle 0.600%).` → Alles ok; Schwelle überschritten, Display wird neu gezeichnet.
+- `WLAN-Verbindung fehlgeschlagen.` → `WIFI_SSID`/`WIFI_PASSWORD` in `include/secrets.h` prüfen, 2.4-GHz-WLAN aktivieren, Abstand/Signalstärke am Router testen.
 
 ## Enthalten
 
