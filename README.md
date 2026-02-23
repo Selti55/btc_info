@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.5**
+Aktuelle Version: **v0.3.6**
 
 ## Enthalten
 
@@ -68,8 +68,29 @@ Alle wichtigen Stellschrauben stehen gesammelt am **Anfang** von `src/main.cpp` 
 - Zeitfenster (`CFG_FETCH_INTERVAL_*`, `CFG_*_HOUR`)
 - Display-Schwelle (`CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT`)
 - NTP-/Zeitzonen-Einstellungen (`CFG_TZ_INFO`, `CFG_NTP_SERVER_*`)
+- Profil-Auswahl (`CFG_PROFILE`)
 
 Damit kann man das Verhalten ändern, ohne tiefer in die Logik eingreifen zu müssen.
+
+### Ein-Schalter-Profilwahl (`CFG_PROFILE`)
+
+Du kannst das Gesamtverhalten jetzt mit **einer** Einstellung steuern:
+
+- `CFG_PROFILE_SPARSAM`
+- `CFG_PROFILE_AUSGEWOGEN`
+- `CFG_PROFILE_REAKTIV`
+- `CFG_PROFILE_NACHTMODUS`
+
+In `src/main.cpp` einfach die Zeile anpassen:
+
+`#define CFG_PROFILE CFG_PROFILE_AUSGEWOGEN`
+
+Der Code setzt damit automatisch:
+
+- `CFG_FETCH_INTERVAL_DAY_MS`
+- `CFG_FETCH_INTERVAL_EVENING_MS`
+- `CFG_FETCH_INTERVAL_NIGHT_MS`
+- `CFG_DISPLAY_UPDATE_THRESHOLD_PERCENT`
 
 ### Cheat-Sheet: Welchen `#define` ändere ich wofür?
 

@@ -16,6 +16,17 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.6] - 2026-02-23
+
+### Added
+- `src/main.cpp` um Ein-Schalter-Profilwahl erweitert (`CFG_PROFILE` mit `SPARSAM`, `AUSGEWOGEN`, `REAKTIV`, `NACHTMODUS`).
+- Automatische Ableitung von Abrufintervallen und Display-Schwelle aus dem gewählten Profil ergänzt.
+- Serielle Ausgabe zeigt aktives Profil beim Start.
+
+### Changed
+- README auf Version `v0.3.6` aktualisiert.
+- README um Abschnitt zur Nutzung von `CFG_PROFILE` ergänzt.
+
 ## [0.3.5] - 2026-02-23
 
 ### Added
@@ -111,7 +122,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.6...HEAD
+[0.3.6]: https://github.com/Selti55/btc_info/releases/tag/v0.3.6
 [0.3.5]: https://github.com/Selti55/btc_info/releases/tag/v0.3.5
 [0.3.4]: https://github.com/Selti55/btc_info/releases/tag/v0.3.4
 [0.3.3]: https://github.com/Selti55/btc_info/releases/tag/v0.3.3
