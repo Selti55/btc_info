@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.3**
+Aktuelle Version: **v0.3.4**
 
 ## Enthalten
 
@@ -87,7 +87,7 @@ Damit kann man das Verhalten ändern, ohne tiefer in die Logik eingreifen zu mü
 
 Hinweis: Erst einen Parameter ändern, dann 1-2 Tage beobachten (Display-Refresh-Rate, Akkuverbrauch, WLAN-Stabilität).
 
-### Presets: sparsam, ausgewogen, reaktiv
+### Presets: sparsam, ausgewogen, reaktiv, nachtmodus
 
 Diese Presets sind fertige Startpunkte. Werte direkt in den passenden `CFG_*`-Defines setzen.
 
@@ -96,6 +96,7 @@ Diese Presets sind fertige Startpunkte. Werte direkt in den passenden `CFG_*`-De
 | Sparsam | `20UL * 60UL * 1000UL` | `45UL * 60UL * 1000UL` | `120UL * 60UL * 1000UL` | `0.8f` | Maximale Akku- und Display-Schonung |
 | Ausgewogen | `10UL * 60UL * 1000UL` | `30UL * 60UL * 1000UL` | `90UL * 60UL * 1000UL` | `0.5f` | Gute Balance aus Aktualität und Laufzeit |
 | Reaktiv | `5UL * 60UL * 1000UL` | `10UL * 60UL * 1000UL` | `30UL * 60UL * 1000UL` | `0.3f` | Möglichst schnelle sichtbare Kursreaktion |
+| Nachtmodus | `10UL * 60UL * 1000UL` | `30UL * 60UL * 1000UL` | `180UL * 60UL * 1000UL` | `0.6f` | Tagsüber normal, nachts besonders stromsparend |
 
 Praxis-Tipp: Erst mit Ausgewogen starten. Danach nur eine Stellschraube gleichzeitig ändern und 24-48 Stunden beobachten.
 

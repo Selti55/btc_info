@@ -16,6 +16,14 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.4] - 2026-02-23
+
+### Added
+- Neues Preset `nachtmodus` in der README ergänzt (tagsüber ausgewogen, nachts besonders stromsparend).
+
+### Changed
+- README auf Version `v0.3.4` aktualisiert.
+
 ## [0.3.3] - 2026-02-23
 
 ### Added
@@ -94,7 +102,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/Selti55/btc_info/releases/tag/v0.3.4
 [0.3.3]: https://github.com/Selti55/btc_info/releases/tag/v0.3.3
 [0.3.2]: https://github.com/Selti55/btc_info/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Selti55/btc_info/releases/tag/v0.3.1
