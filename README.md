@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.4**
+Aktuelle Version: **v0.3.5**
 
 ## Enthalten
 
@@ -99,6 +99,18 @@ Diese Presets sind fertige Startpunkte. Werte direkt in den passenden `CFG_*`-De
 | Nachtmodus | `10UL * 60UL * 1000UL` | `30UL * 60UL * 1000UL` | `180UL * 60UL * 1000UL` | `0.6f` | Tagsüber normal, nachts besonders stromsparend |
 
 Praxis-Tipp: Erst mit Ausgewogen starten. Danach nur eine Stellschraube gleichzeitig ändern und 24-48 Stunden beobachten.
+
+### Preset-Empfehlung nach Akkutyp
+
+Die Werte sind grobe Praxisbereiche und hängen stark von WLAN-Qualität, Temperatur und API-Latenz ab.
+
+| Akku | Empfohlenes Preset | Typische Laufzeit | Kommentar |
+| --- | --- | --- | --- |
+| 18650 2500 mAh | Ausgewogen | ca. 58-86 Tage | Guter Startpunkt für Alltag und stabile Anzeige |
+| 18650 2500 mAh | Nachtmodus | ca. 65-95 Tage | Wenn nachts maximale Einsparung wichtig ist |
+| 18650 3000 mAh | Ausgewogen | ca. 70-103 Tage | Ähnliches Verhalten wie 2500 mAh, nur mit Reserve |
+| 18650 3000 mAh | Sparsam | ca. 85-125 Tage | Fokus auf maximale Laufzeit statt Reaktivität |
+| Powerbank/Netzbetrieb | Reaktiv | stark abhängig von Quelle | Sinnvoll, wenn schnelle Kursreaktion wichtiger als Akku ist |
 
 ## Grobe Laufzeit-Abschätzung (2500 mAh, 18650)
 
