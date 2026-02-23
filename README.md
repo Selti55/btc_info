@@ -2,7 +2,7 @@
 
 Neues PlatformIO-Projekt als Startbasis für BTC-Infos auf einem Waveshare ESP32-S3 1.54" e-Paper.
 
-Aktuelle Version: **v0.3.8**
+Aktuelle Version: **v0.3.9**
 
 ## Enthalten
 
@@ -140,6 +140,14 @@ Praxis-Tipp: Erst mit Ausgewogen starten. Danach nur eine Stellschraube gleichze
 #### Nachtmodus
 - **Vorteile:** tagsüber brauchbare Aktualität, nachts starke Einsparung; sehr guter Praxis-Kompromiss.
 - **Nachteile:** nachts trägere Anzeige, bei nächtlicher Volatilität weniger Zwischenstände sichtbar.
+
+### Welchen Modus soll ich wählen? (3 schnelle Fragen)
+
+1. **Willst du maximale Laufzeit und schaust nur gelegentlich?** → `sparsam`
+2. **Willst du einen stabilen Alltag-Kompromiss?** → `ausgewogen`
+3. **Ist dir schnelle Reaktion wichtiger als Akku?** → `reaktiv`
+
+Wenn du nachts besonders sparen willst, tagsüber aber normal schauen möchtest, nimm `nachtmodus` (Default).
 
 ### Preset-Empfehlung nach Akkutyp
 
