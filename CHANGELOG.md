@@ -16,6 +16,15 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 ### Fixed
 -
 
+## [0.3.3] - 2026-02-23
+
+### Added
+- README um eine Preset-Tabelle erweitert: `sparsam`, `ausgewogen`, `reaktiv` mit direkt nutzbaren `CFG_*`-Werten.
+- Zusätzliche Praxis-Hinweise ergänzt (erst mit `ausgewogen` starten, dann einzeln feinjustieren).
+
+### Changed
+- README auf Version `v0.3.3` aktualisiert.
+
 ## [0.3.2] - 2026-02-23
 
 ### Added
@@ -85,7 +94,8 @@ und dieses Projekt verwendet [Semantic Versioning](https://semver.org/lang/de/).
 - Initiale Projektstruktur für PlatformIO/ESP32 angelegt.
 - GitHub-Repository verbunden und erster Stand veröffentlicht.
 
-[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Selti55/btc_info/compare/v0.3.3...HEAD
+[0.3.3]: https://github.com/Selti55/btc_info/releases/tag/v0.3.3
 [0.3.2]: https://github.com/Selti55/btc_info/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Selti55/btc_info/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Selti55/btc_info/releases/tag/v0.3.0
