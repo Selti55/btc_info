@@ -22,6 +22,12 @@
 // - NTP / Zeitfunktionen (ESP32 Arduino):
 //   https://docs.espressif.com/projects/arduino-esp32/en/latest/api/time.html
 // - CoinGecko API: https://www.coingecko.com/en/api/documentation
+// - ESP32 WebServer (lokale Konfig-Seite):
+//   https://github.com/espressif/arduino-esp32/tree/master/libraries/WebServer
+// - ESP32 Preferences/NVS (dauerhafte Speicherung):
+//   https://docs.espressif.com/projects/arduino-esp32/en/latest/api/preferences.html
+// - ESP32 SoftAP (eigenes WLAN des Geräts):
+//   https://docs.espressif.com/projects/arduino-esp32/en/latest/api/wifi.html
 //
 // Idee: Hier oben stehen ALLE zentralen Stellschrauben.
 // Du musst für typische Anpassungen später kaum im restlichen Code suchen.
@@ -49,6 +55,9 @@
 #define CFG_BOOT_DELAY_MS 300
 
 // Konfigurations-Portal nach Reset
+// Verhalten:
+// - true  -> Bei normalem Reset startet zuerst eine Setup-Webseite.
+// - false -> Gerät startet sofort in den normalen Datenmodus.
 #define CFG_CONFIG_PORTAL_ON_RESET true
 #define CFG_CONFIG_PORTAL_TIMEOUT_MS 180000UL
 #define CFG_CONFIG_PORTAL_AP_SSID "BTC-INFO-SETUP"
@@ -219,17 +228,26 @@ struct BtcSnapshot
 
 struct AppSettings
 {
+  // WLAN-Zugangsdaten, die das Gerät für Internet-Zugriff nutzt.
   String wifiSsid;
   String wifiPassword;
+
+  // Logik-/Profil-Schalter.
   uint8_t profile;
   uint8_t dynamicPreset;
   uint8_t chartCurrency;
+
+  // Zeitfenster (Tag/Abend/Nacht).
   int dayStartHour;
   int eveningStartHour;
   int nightStartHour;
+
+  // Abrufintervalle je Zeitfenster.
   unsigned long fetchIntervalDayMs;
   unsigned long fetchIntervalEveningMs;
   unsigned long fetchIntervalNightMs;
+
+  // Display-Update-Schwelle und Dynamikgrenzen.
   float displayUpdateThresholdPercent;
   float dynamicSleepMinFactorDay;
   float dynamicSleepMaxFactorDay;
@@ -534,6 +552,8 @@ unsigned long minutesToMs(uint16_t minutes)
 
 void applyProfileTemplateToSettings(uint8_t profile, AppSettings &settings)
 {
+  // Setzt ein komplettes Basis-Setup in einem Schritt.
+  // Einsteiger-Tipp: hier ändern, wenn neue Profile hinzukommen sollen.
   settings.profile = profile;
 
   switch (profile)
@@ -569,6 +589,7 @@ void applyProfileTemplateToSettings(uint8_t profile, AppSettings &settings)
 
 void applyDynamicPresetToSettings(uint8_t preset, AppSettings &settings)
 {
+  // Preset steuert nur die Kurven-Exponenten (nicht die Zeitfenster).
   settings.dynamicPreset = preset;
 
   switch (preset)
@@ -592,6 +613,8 @@ void applyDynamicPresetToSettings(uint8_t preset, AppSettings &settings)
 
 void sanitizeSettings(AppSettings &settings)
 {
+  // Schützt vor ungültigen Werten aus Web-Formular oder Speicher,
+  // damit das Gerät immer mit sicheren Grenzen laufen kann.
   settings.chartCurrency = (settings.chartCurrency == CFG_CHART_CURRENCY_USD) ? CFG_CHART_CURRENCY_USD : CFG_CHART_CURRENCY_EUR;
 
   settings.dayStartHour = constrain(settings.dayStartHour, 0, 23);
@@ -614,6 +637,8 @@ void sanitizeSettings(AppSettings &settings)
 
 void loadSettingsFromPreferences()
 {
+  // Erst sinnvolle Defaults aus Compile-Time-Konfiguration laden,
+  // danach ggf. durch persistente Werte überschreiben.
   g_settings.wifiSsid = WIFI_SSID;
   g_settings.wifiPassword = WIFI_PASSWORD;
   g_settings.profile = CFG_PROFILE;
@@ -658,6 +683,8 @@ void loadSettingsFromPreferences()
 
 void saveSettingsToPreferences(const AppSettings &settings)
 {
+  // Speichert alle Formularwerte dauerhaft in NVS.
+  // Diese Werte werden beim nächsten Reset wieder als Default angezeigt.
   if (!g_preferences.begin("btc_cfg", false))
   {
     Serial.println("Preferences (write) konnte nicht geoeffnet werden.");
@@ -687,6 +714,8 @@ String selectedIf(bool selected)
 
 String buildConfigPageHtml()
 {
+  // HTML bewusst kompakt als String aufgebaut,
+  // damit keine zusätzlichen Dateien/Filesystem nötig sind.
   String html;
   html.reserve(5000);
   html += "<!doctype html><html><head><meta charset='utf-8'>";
@@ -734,12 +763,14 @@ String buildConfigPageHtml()
   html += "<form method='POST' action='/factory-reset' onsubmit='return confirm(\"Alle gespeicherten Einstellungen wirklich loeschen?\");'>";
   html += "<button type='submit' class='danger'>Werkseinstellungen wiederherstellen</button>";
   html += "</form>";
+  html += "<p><small>Hinweis Werksreset: Loescht gespeichertes WLAN, Profil, Dynamik, Chart-Waehrung, Zeitfenster, Intervalle und Schwellenwert.</small></p>";
   html += "<p><small>AP SSID: " CFG_CONFIG_PORTAL_AP_SSID " | URL: http://192.168.4.1</small></p></body></html>";
   return html;
 }
 
 void handleConfigSave()
 {
+  // Nimmt Formularwerte entgegen, validiert sie und speichert sie dauerhaft.
   AppSettings updated = g_settings;
 
   updated.wifiSsid = g_configServer.arg("wifi_ssid");
@@ -777,6 +808,8 @@ void handleConfigSave()
 
 void handleFactoryReset()
 {
+  // Löscht den kompletten Preferences-Namespace des Projekts.
+  // Danach greifen wieder die Compile-Time-Defaults aus dem Code.
   if (!g_preferences.begin("btc_cfg", false))
   {
     g_configServer.send(500, "text/html", "<html><body><h3>Fehler</h3><p>Preferences konnten nicht geoeffnet werden.</p></body></html>");
@@ -796,6 +829,8 @@ void handleFactoryReset()
 
 bool shouldStartConfigPortalOnThisBoot()
 {
+  // Portal nur bei "echtem" Reset starten.
+  // Bei Wakeup aus Timer-Deep-Sleep soll der normale Zyklus direkt laufen.
   if (!CFG_CONFIG_PORTAL_ON_RESET)
   {
     return false;
@@ -806,6 +841,8 @@ bool shouldStartConfigPortalOnThisBoot()
 
 void runConfigPortalIfNeeded()
 {
+  // Startet ein lokales WLAN (SoftAP) und stellt eine kleine Setup-Webseite bereit.
+  // Nach Speichern oder Werksreset wird neu gestartet.
   if (!shouldStartConfigPortalOnThisBoot())
   {
     return;
